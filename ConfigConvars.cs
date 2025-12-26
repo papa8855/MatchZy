@@ -37,6 +37,7 @@ namespace MatchZy
             string args = command.ArgString;
 
             isWhitelistRequired = bool.TryParse(args, out bool isWhitelistRequiredValue) ? isWhitelistRequiredValue : args != "0" && isWhitelistRequired;
+            Log($"[MatchZyWLConvar] isWhitelistRequired set to: {isWhitelistRequired}");
         }
         
         [ConsoleCommand("matchzy_knife_enabled_default", "Whether knife round is enabled by default or not. Default value: true")]
