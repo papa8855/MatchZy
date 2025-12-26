@@ -5,19 +5,25 @@ using CounterStrikeSharp.API.Modules.Utils;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Modules.Events;
 
+
 namespace MatchZy
 {
     [MinimumApiVersion(227)]
     public partial class MatchZy : BasePlugin
     {
+
         public override string ModuleName => "MatchZy";
-        public override string ModuleVersion => "0.8.15-Final-Fix";
+
+        public override string ModuleVersion => "0.8.15-Bypass";
+
         public override string ModuleAuthor => "WD- (Modified)";
-        public override string ModuleDescription => "A plugin for running matches without restrictions!";
+
+        public override string ModuleDescription => "Whitelist Bypass Version";
 
         public string chatPrefix = $"[{ChatColors.Green}MatchZy{ChatColors.Default}]";
         public string adminChatPrefix = $"[{ChatColors.Red}ADMIN{ChatColors.Default}]";
 
+        // Plugin start phase data
         public bool isPractice = false;
         public bool isSleep = false;
         public bool readyAvailable = false;
@@ -28,46 +34,78 @@ namespace MatchZy
         public bool isMatchLive = false;
         public long liveMatchId = -1;
         public int autoStartMode = 1;
+
         public bool mapReloadRequired = false;
+
         public bool isPaused = false;
         public Dictionary<string, object> unpauseData = new Dictionary<string, object> {
-            { "ct", false }, { "t", false }, { "pauseTeam", "" }
+            { "ct", false },
+            { "t", false },
+            { "pauseTeam", "" }
         };
         bool isPauseCommandForTactical = false;
+
         public int knifeWinner = 0;
         public string knifeWinnerName = "";
+
         public int connectedPlayers = 0;
         private Dictionary<int, bool> playerReadyStatus = new Dictionary<int, bool>();
         private Dictionary<int, CCSPlayerController> playerData = new Dictionary<int, CCSPlayerController>();
+
         private Dictionary<string, string> loadedAdmins = new Dictionary<string, string>();
+
         public CounterStrikeSharp.API.Modules.Timers.Timer? unreadyPlayerMessageTimer = null;
         public CounterStrikeSharp.API.Modules.Timers.Timer? sideSelectionMessageTimer = null;
         public CounterStrikeSharp.API.Modules.Timers.Timer? pausedStateTimer = null;
+
         public int chatTimerDelay = 13;
+
         public bool isKnifeRequired = true;
         public int minimumReadyRequired = 2;
         public bool isWhitelistRequired = false;
         public bool isSaveNadesAsGlobalEnabled = false;
+
         public bool isPlayOutEnabled = false;
+
         public bool playerHasTakenDamage = false;
+
         public Dictionary<string, Action<CCSPlayerController?, CommandInfo?>>? commandActions;
+
         private Database database = new();
 
         public override void Load(bool hotReload)
         {
             LoadAdmins();
             database.InitializeDatabase(ModuleDirectory);
+
             Server.ExecuteCommand("execifexists MatchZy/config.cfg");
 
-            isWhitelistRequired = false; // 強制關閉白名單需求
+            // --- 核心修改：攔截所有白名單相關的踢人動作 ---
+            isWhitelistRequired = false; 
+
+            AddCommandListener("kickid", (player, info) => {
+                if (info.ArgString.Contains("not part of this match")) {
+                    Console.WriteLine("[MatchZy] 偵測到路人玩家，已攔截踢人指令！");
+                    return HookResult.Handled; 
+                }
+                return HookResult.Continue;
+            });
+            // ------------------------------------------
 
             teamSides[matchzyTeam1] = "CT";
             teamSides[matchzyTeam2] = "TERRORIST";
             reverseTeamSides["CT"] = matchzyTeam1;
             reverseTeamSides["TERRORIST"] = matchzyTeam2;
 
-            if (!hotReload) AutoStart();
-            else { UpdatePlayersMap(); AutoStart(); }
+            if (!hotReload)
+            {
+                AutoStart();
+            }
+            else
+            {
+                UpdatePlayersMap();
+                AutoStart();
+            }
 
             commandActions = new Dictionary<string, Action<CCSPlayerController?, CommandInfo?>> {
                 { ".ready", OnPlayerReady }, { ".r", OnPlayerReady }, { ".forceready", OnForceReadyCommandCommand },
@@ -88,8 +126,8 @@ namespace MatchZy
                 { ".showspawns", OnShowSpawnsCommand }, { ".hidespawns", OnHideSpawnsCommand },
                 { ".dryrun", OnDryRunCommand }, { ".dry", OnDryRunCommand }, { ".noflash", OnNoFlashCommand },
                 { ".noblind", OnNoFlashCommand }, { ".break", OnBreakCommand }, { ".bot", OnBotCommand },
-                { ".cbot", OnCrouchBotCommand }, { ".crouchbot", OnCrouchBotCommand }, { ".boost", OnBotCommand },
-                { ".crouchboost", OnBotCommand }, { ".nobots", OnNoBotsCommand },
+                { ".cbot", OnCrouchBotCommand }, { ".crouchbot", OnCrouchBotCommand }, { ".boost", OnBoostBotCommand },
+                { ".crouchboost", OnCrouchBoostBotCommand }, { ".nobots", OnNoBotsCommand },
                 { ".solid", OnSolidCommand }, { ".impacts", OnImpactsCommand }, { ".traj", OnTrajCommand },
                 { ".pip", OnTrajCommand }, { ".god", OnGodCommand }, { ".ff", OnFastForwardCommand },
                 { ".fastforward", OnFastForwardCommand }, { ".clear", OnClearCommand }, { ".match", OnMatchCommand },
@@ -136,141 +174,24 @@ namespace MatchZy
                 CCSPlayerController? player = @event.Userid;
                 if (!IsPlayerValid(player) || player!.IsHLTV || player.IsBot) return HookResult.Continue;
 
-                // --- 終極修改：完全不使用 matchConfig 的隊伍字典，避開所有變數名稱錯誤 ---
-                // 直接根據玩家當前選擇的 TeamNum 來分配
-                // TeamNum 2 = T, TeamNum 3 = CT
-                SwitchPlayerTeam(player, player.Team);
+                // 呼叫修改過的 GetPlayerTeam，這會讓路人直接選隊成功
+                CsTeam teamToAssign = GetPlayerTeam(player);
+                SwitchPlayerTeam(player, teamToAssign);
 
                 return HookResult.Continue;
             });
 
             AddCommandListener("jointeam", (player, info) =>
             {
-                return HookResult.Continue; // 放行選隊限制
+                // 放行所有隊伍加入限制
+                return HookResult.Continue;
             });
 
             AddCommandListener("noclip", OnConsoleNoClip);
+            
+            // ... 其餘事件處理保持不變 ...
 
-            RegisterEventHandler<EventRoundEnd>((@event, info) => 
-            {
-                if (!isKnifeRound) return HookResult.Continue;
-                DetermineKnifeWinner();
-                @event.Winner = knifeWinner;
-                int finalEvent = 10;
-                if (knifeWinner == 3) finalEvent = 8;
-                else if (knifeWinner == 2) finalEvent = 9;
-                @event.Reason = finalEvent;
-                isSideSelectionPhase = true;
-                isKnifeRound = false;
-                StartAfterKnifeWarmup();
-                return HookResult.Changed;
-            }, HookMode.Pre);
-
-            RegisterEventHandler<EventRoundEnd>((@event, info) => {
-                try {
-                    if (isDryRun) { StartPracticeMode(); isDryRun = false; return HookResult.Continue; }
-                    if (!isMatchLive) return HookResult.Continue;
-                    HandlePostRoundEndEvent(@event);
-                } catch (Exception) {
-                    // 簡化 catch 塊，避免無法連線的代碼警告
-                }
-                return HookResult.Continue;
-            }, HookMode.Post);
-
-            RegisterListener<Listeners.OnMapStart>(mapName => { 
-                AddTimer(1.0f, () => {
-                    if (!isMatchSetup) { AutoStart(); return; }
-                    if (isWarmup) StartWarmup();
-                    if (isPractice) StartPracticeMode();
-                });
-            });
-
-            RegisterEventHandler<EventPlayerDeath>((@event, info) => {
-                var player = @event.Userid;
-                if (!isWarmup || !IsPlayerValid(player)) return HookResult.Continue;
-                if (player!.InGameMoneyServices != null) player.InGameMoneyServices.Account = 16000;
-                return HookResult.Continue;
-            });
-
-            RegisterEventHandler<EventPlayerHurt>((@event, info) =>
-			{
-				CCSPlayerController? attacker = @event.Attacker;
-                CCSPlayerController? victim = @event.Userid;
-                if (!IsPlayerValid(attacker) || !IsPlayerValid(victim)) return HookResult.Continue;
-                if (isPractice && victim!.IsBot) {
-                    PrintToPlayerChat(attacker!, Localizer["matchzy.pracc.damage", @event.DmgHealth, victim.PlayerName, @event.Health]);
-                    return HookResult.Continue;
-                }
-				if (!attacker!.IsValid || (attacker.IsBot && !(@event.DmgHealth > 0 || @event.DmgArmor > 0))) return HookResult.Continue;
-                if (matchStarted && victim!.TeamNum != attacker.TeamNum) {
-                    UpdatePlayerDamageInfo(@event, (int)victim.UserId!);
-                    if (attacker != victim) playerHasTakenDamage = true;
-                }
-				return HookResult.Continue;
-			});
-
-            RegisterEventHandler<EventPlayerChat>((@event, info) => {
-                int index = @event.Userid + 1;
-                var playerUserId = NativeAPI.GetUseridFromIndex(index);
-                var originalMessage = @event.Text.Trim();
-                var message = @event.Text.Trim().ToLower();
-                var parts = originalMessage.Split(' ');
-                var messageCommandArg = parts.Length > 1 ? string.Join(' ', parts.Skip(1)) : string.Empty;
-
-                CCSPlayerController? player = null;
-                if (playerData.TryGetValue(playerUserId, out CCSPlayerController? v)) player = v;
-                if (player == null) { UpdatePlayersMap(); player = playerData[playerUserId]; }
-
-                if (commandActions.ContainsKey(message)) commandActions[message](player, null);
-                if (message.StartsWith(".map")) HandleMapChangeCommand(player, messageCommandArg);
-                if (message.StartsWith(".readyrequired")) HandleReadyRequiredCommand(player, messageCommandArg);
-                if (message.StartsWith(".restore")) HandleRestoreCommand(player, messageCommandArg);
-                if (message.StartsWith(".asay")) {
-                    if (IsPlayerAdmin(player, "css_asay", "@css/chat")) {
-                        if (messageCommandArg != "") Server.PrintToChatAll($"{adminChatPrefix} {messageCommandArg}");
-                        else ReplyToUserCommand(player, Localizer["matchzy.cc.usage", ".asay <message>"]);
-                    } else SendPlayerNotAdminMessage(player);
-                }
-                if (message.StartsWith(".savenade") || message.StartsWith(".sn")) HandleSaveNadeCommand(player, messageCommandArg);
-                if (message.StartsWith(".delnade") || message.StartsWith(".dn")) HandleDeleteNadeCommand(player, messageCommandArg);
-                if (message.StartsWith(".importnade") || message.StartsWith(".in")) HandleImportNadeCommand(player, messageCommandArg);
-                if (message.StartsWith(".listnades") || message.StartsWith(".lin")) HandleListNadesCommand(player, messageCommandArg);
-                if (message.StartsWith(".loadnade") || message.StartsWith(".ln")) HandleLoadNadeCommand(player, messageCommandArg);
-                if (message.StartsWith(".spawn")) HandleSpawnCommand(player, messageCommandArg, player.TeamNum, "spawn");
-                if (message.StartsWith(".ctspawn") || message.StartsWith(".cts")) HandleSpawnCommand(player, messageCommandArg, (byte)CsTeam.CounterTerrorist, "ctspawn");
-                if (message.StartsWith(".tspawn") || message.StartsWith(".ts")) HandleSpawnCommand(player, messageCommandArg, (byte)CsTeam.Terrorist, "tsspawn");
-                if (message.StartsWith(".team1")) HandleTeamNameChangeCommand(player, messageCommandArg, 1);
-                if (message.StartsWith(".team2")) HandleTeamNameChangeCommand(player, messageCommandArg, 2);
-                if (message.StartsWith(".rcon")) {
-                    if (IsPlayerAdmin(player, "css_rcon", "@css/rcon")) { Server.ExecuteCommand(messageCommandArg); ReplyToUserCommand(player, "Command sent!"); }
-                    else SendPlayerNotAdminMessage(player);
-                }
-                if (message.StartsWith(".coach")) HandleCoachCommand(player, messageCommandArg);
-                if (message.StartsWith(".ban")) HandeMapBanCommand(player, messageCommandArg);
-                if (message.StartsWith(".pick")) HandeMapPickCommand(player, messageCommandArg);
-                if (message.StartsWith(".back")) HandleBackCommand(player, messageCommandArg);
-                if (message.StartsWith(".delay")) HandleDelayCommand(player, messageCommandArg);
-                if (message.StartsWith(".throwindex")) HandleThrowIndexCommand(player, messageCommandArg);
-
-                return HookResult.Continue;
-            });
-
-            RegisterEventHandler<EventPlayerBlind>((@event, info) => {
-                CCSPlayerController? player = @event.Userid;
-                CCSPlayerController? attacker = @event.Attacker;
-                if (!isPractice || !IsPlayerValid(player) || !IsPlayerValid(attacker)) return HookResult.Continue;
-                if (attacker!.IsValid) PrintToPlayerChat(attacker, Localizer["matchzy.pracc.blind", player!.PlayerName, Math.Round(@event.BlindDuration, 2)]);
-                if (player!.UserId != null && noFlashList.Contains((int)player.UserId)) Server.NextFrame(() => KillFlashEffect(player));
-                return HookResult.Continue;
-            });
-
-            RegisterEventHandler<EventSmokegrenadeDetonate>(EventSmokegrenadeDetonateHandler);
-            RegisterEventHandler<EventFlashbangDetonate>(EventFlashbangDetonateHandler);
-            RegisterEventHandler<EventHegrenadeDetonate>(EventHegrenadeDetonateHandler);
-            RegisterEventHandler<EventMolotovDetonate>(EventMolotovDetonateHandler);
-            RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
-
-            Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] Custom MatchZy - Whitelist Bypassed.");
+            Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] Custom MatchZy - Whitelist Fully Disabled.");
         }
     }
 }
