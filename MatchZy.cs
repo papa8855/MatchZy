@@ -205,7 +205,7 @@ namespace MatchZy
                 { ".loadpos", OnLoadPosCommand}
             };
 
-RegisterEventHandler<EventPlayerConnectFull>((@event, info) => {
+            RegisterEventHandler<EventPlayerConnectFull>((@event, info) => {
                 isWhitelistRequired = false; 
                 return HookResult.Continue;
             }, HookMode.Pre);
@@ -382,15 +382,17 @@ RegisterEventHandler<EventPlayerConnectFull>((@event, info) => {
                 var messageCommandArg = parts.Length > 1 ? string.Join(' ', parts.Skip(1)) : string.Empty;
 
                 CCSPlayerController? player = null;
-                if (playerData.TryGetValue(playerUserId, out CCSPlayerController? value)) {
-                    player = value;
-                }
+if (playerData.TryGetValue(playerUserId, out CCSPlayerController? value)) {
+    player = value;
+}
 
-                if (player == null) {
-                    // Somehow we did not had the player in playerData, hence updating the maps again before getting the player
-                    UpdatePlayersMap();
-                    player = playerData[playerUserId];
-                }
+if (player == null) {
+    UpdatePlayersMap();
+    // 安全檢查：如果更新後還是找不到玩家資料，就直接跳過這次處理，防止報錯踢人
+    if (!playerData.TryGetValue(playerUserId, out player)) {
+        return HookResult.Continue;
+    }
+}
 
                 // Handling player commands
                 if (commandActions.ContainsKey(message)) {
