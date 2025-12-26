@@ -540,14 +540,11 @@ namespace MatchZy
             var steamId = player.SteamID;
             try
             {
-                // Check if both teams are empty (Open Mode)
-                // Using .HasValues to check if there are actual players listed
+                // Check if teams are defined (check for null or empty object)
                 bool isTeam1Empty = matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues;
                 bool isTeam2Empty = matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues;
 
-                // If both teams are undefined/empty in the JSON, treat as Open Mode.
-                // Returning CsTeam.None here is intentional; the 'jointeam' listener in MatchZy.cs 
-                // has been updated to ALLOW joining if GetPlayerTeam returns None in this scenario.
+                // If both teams are empty, we treat it as Open Mode (CsTeam.None)
                 if (isTeam1Empty && isTeam2Empty)
                 {
                     return CsTeam.None;
