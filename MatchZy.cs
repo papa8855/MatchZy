@@ -205,7 +205,8 @@ namespace MatchZy
                 { ".loadpos", OnLoadPosCommand}
             };
 
-            RegisterEventHandler<EventPlayerConnectFull>(EventPlayerConnectFullHandler);
+            // 使用 CustomPlayerConnectFullHandler 替代原本的事件，避免重複定義並實作新邏輯
+            RegisterEventHandler<EventPlayerConnectFull>(CustomPlayerConnectFullHandler);
             RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnectHandler);
             RegisterEventHandler<EventCsWinPanelRound>(EventCsWinPanelRoundHandler, hookMode: HookMode.Pre);
             RegisterEventHandler<EventCsWinPanelMatch>(EventCsWinPanelMatchHandler);
@@ -547,7 +548,8 @@ namespace MatchZy
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
 
-        private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+        // 定義自定義的連線事件處理器，避免與部分類別中隱藏的 EventPlayerConnectFullHandler 衝突
+        private HookResult CustomPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
             
@@ -574,7 +576,7 @@ namespace MatchZy
                 // Only kick if whitelist is strictly required
                 if (!IsPlayerInMatchConfig(steamId))
                 {
-                    Log($"[EventPlayerConnectFullHandler] Player {player.PlayerName} ({steamId}) not on whitelist. Kicking...");
+                    Log($"[CustomPlayerConnectFullHandler] Player {player.PlayerName} ({steamId}) not on whitelist. Kicking...");
                     if (player.UserId.HasValue)
                     {
                         Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not whitelisted for this match!\"");
