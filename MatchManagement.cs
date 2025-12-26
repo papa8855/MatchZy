@@ -330,12 +330,12 @@ namespace MatchZy
 
                     // Push a map side if one hasn't been set yet.
                     if (matchConfig.MapSides.Count < matchConfig.Maplist.Count) {
-                        if (matchConfig.MatchSideType == "standard" || matchConfig.MatchSideType == "always_knife") {
-                            matchConfig.MapSides.Add("knife");
-                        } else if (matchConfig.MatchSideType == "random") {
-                            matchConfig.MapSides.Add(new Random().Next(0, 2) == 0 ? "team1_ct" : "team1_t");
+                        if (matchConfig.MatchSideType == "standard" || matchConfig.MatchSideType == \"always_knife\") {
+                            matchConfig.MapSides.Add(\"knife\");
+                        } else if (matchConfig.MatchSideType == \"random\") {
+                            matchConfig.MapSides.Add(new Random().Next(0, 2) == 0 ? \"team1_ct\" : \"team1_t\");
                         } else {
-                            matchConfig.MapSides.Add("team1_ct");
+                            matchConfig.MapSides.Add(\"team1_ct\");
                         }
                     }
                 }
