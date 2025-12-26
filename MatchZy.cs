@@ -255,7 +255,9 @@ namespace MatchZy
                 if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         int playerTeam = (int)GetPlayerTeam(player);
-                        if (joiningTeam != playerTeam) {
+                        // If the team is open (playerTeam isn't forced to CT/T/Spec based on ID), allow the join
+                        // unless it's strictly "None" which means we haven't handled them (but new logic handles this in MatchManagement)
+                        if (playerTeam != (int)CsTeam.None && joiningTeam != playerTeam) {
                             return HookResult.Stop;
                         }
                     }
@@ -543,6 +545,61 @@ namespace MatchZy
             RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
 
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
+        }
+
+        private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+        {
+            CCSPlayerController? player = @event.Userid;
+            
+            if (!IsPlayerValid(player)) return HookResult.Continue;
+
+            var steamId = player!.SteamID;
+
+            if (player.UserId.HasValue)
+            {
+                playerData[player.UserId.Value] = player;
+                connectedPlayers++;
+            }
+
+            // Welcome Message
+            if (showCreditsOnMatchStart.Value)
+            {
+                PrintToPlayerChat(player, Localizer["matchzy.cc.enabled"]);
+                PrintToPlayerChat(player, $"MatchZy v{ModuleVersion} loaded!");
+            }
+
+            // Whitelist Logic
+            if (isWhitelistRequired && isMatchSetup)
+            {
+                // Only kick if whitelist is strictly required
+                if (!IsPlayerInMatchConfig(steamId))
+                {
+                    Log($"[EventPlayerConnectFullHandler] Player {player.PlayerName} ({steamId}) not on whitelist. Kicking...");
+                    if (player.UserId.HasValue)
+                    {
+                        Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not whitelisted for this match!\"");
+                    }
+                    return HookResult.Continue;
+                }
+            }
+            else if (isMatchSetup && !isWhitelistRequired)
+            {
+                // If match is set up but whitelist is disabled (Open Mode), treat guests nicely
+                if (!IsPlayerInMatchConfig(steamId))
+                {
+                     PrintToPlayerChat(player, Localizer["matchzy.custom.guest_welcome"]);
+                }
+            }
+            
+            return HookResult.Continue;
+        }
+
+        private bool IsPlayerInMatchConfig(ulong steamId)
+        {
+             if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null) return true;
+             if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null) return true;
+             if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null) return true;
+             return false;
         }
     }
 }
