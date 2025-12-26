@@ -536,7 +536,7 @@ namespace MatchZy
 
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
-            CsTeam playerTeam = player.Team; // 改良點：優先保留玩家目前隊伍，避免路人被判為 None
+            CsTeam playerTeam = CsTeam.None;
             var steamId = player.SteamID;
             try
             {
@@ -566,6 +566,14 @@ namespace MatchZy
                 else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
                 {
                     playerTeam = CsTeam.Spectator;
+                }
+                
+                // Allow non-whitelisted players to remain on their current team (Mod for roadmen/pug)
+                if (playerTeam == CsTeam.None)
+                {
+                    if (player.TeamNum == 2) playerTeam = CsTeam.Terrorist;
+                    else if (player.TeamNum == 3) playerTeam = CsTeam.CounterTerrorist;
+                    else if (player.TeamNum == 1) playerTeam = CsTeam.Spectator;
                 }
             }
             catch (Exception ex)
