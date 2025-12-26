@@ -1,10 +1,19 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Commands;
-using CounterStrikeSharp.API.Modules.Utils;
 using CounterStrikeSharp.API.Core.Attributes;
+using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Cvars;
+using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Events;
-
+using CounterStrikeSharp.API.Modules.Memory;
+using CounterStrikeSharp.API.Modules.Timers;
+using CounterStrikeSharp.API.Modules.Utils;
 
 namespace MatchZy
 {
@@ -206,33 +215,41 @@ namespace MatchZy
             };
 
             RegisterEventHandler<EventPlayerConnectFull>((@event, info) => {
-                var player = @event.Userid;
+                CCSPlayerController? player = @event.Userid;
+                
+                // 1. Basic Validation
                 if (player == null || !player.IsValid || player.IsBot || player.IsHLTV) return HookResult.Continue;
                 
-                // EVENT PLAYER CONNECT FULL HANDLER
-                
-                // Whitelist check Logic
-                // We STRICTLY check if whitelist is required manually (.whitelist on)
-                // If it is NOT required, we do NOT kick, even if a match is setup.
+                // 2. Whitelist Check Logic
+                // Only enforce kick if the global whitelist setting is ON.
                 if (isWhitelistRequired) {
-                   if (!IsPlayerWhitelisted(player)) {
-                       Log($"[Whitelist] Player {player.PlayerName} ({player.SteamID}) is not on the whitelist. Kicking...");
-                       KickPlayer(player.UserId);
-                       return HookResult.Continue;
-                   }
+                    // Assuming Database class has IsPlayerWhitelisted. 
+                    // If not, this needs to be matched to your Database.cs implementation.
+                    if (!database.IsPlayerWhitelisted(player.SteamID.ToString())) {
+                        Log($"[Whitelist] Player {player.PlayerName} ({player.SteamID}) is not on the whitelist. Kicking...");
+                        
+                        // Execute Kick using Server Command to ensure proper execution
+                        if (player.UserId.HasValue)
+                        {
+                            Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not whitelisted!\"");
+                        }
+                        return HookResult.Continue;
+                    }
                 }
 
-                // If we are here, the player is allowed to stay.
-                // If a match is setup, welcome them as a guest if they are not strictly in the team list (implied by context).
+                // 3. Guest Welcome Logic
+                // If whitelist is OFF (or player passed it), and a match is setup:
                 if (isMatchSetup)
                 {
-                     PrintToChat(player, Localizer["matchzy.custom.guest_welcome"]);
+                    // Correct PrintToChat usage
+                    player.PrintToChat(Localizer["matchzy.custom.guest_welcome"]);
                 }
 
+                // 4. Call original handler logic
                 EventPlayerConnectFullHandler(@event, info);
                 return HookResult.Continue;
             });
-            
+
             RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnectHandler);
             RegisterEventHandler<EventCsWinPanelRound>(EventCsWinPanelRoundHandler, hookMode: HookMode.Pre);
             RegisterEventHandler<EventCsWinPanelMatch>(EventCsWinPanelMatchHandler);
@@ -272,9 +289,6 @@ namespace MatchZy
 
                 CsTeam playerTeam = GetPlayerTeam(player);
 
-                // We do NOT kick here. We only switch teams.
-                // If GetPlayerTeam returns the guest's current team (due to MatchManagement modification),
-                // SwitchPlayerTeam will effectively keep them there.
                 SwitchPlayerTeam(player, playerTeam);
 
                 return HookResult.Continue;
@@ -286,19 +300,10 @@ namespace MatchZy
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         int playerTeam = (int)GetPlayerTeam(player);
                         
-                        // Relaxed Team Join Logic for Guests
-                        // If player is officially on a team (from JSON), block them from joining the wrong one.
-                        // If player is a guest (GetPlayerTeam returns their current team or None-logic handled in MatchManagement),
-                        // we generally allow the join or let the game handle it, unless explicitly restricted by other modes.
-                        
-                        // Note: If MatchManagement.cs GetPlayerTeam returns the current team for guests, 
-                        // playerTeam will equal joiningTeam (if they are already there) or the new team if they switched.
-                        
+                        // Relaxed logic: If GetPlayerTeam returns their current team (for guests),
+                        // allow them to stay, but prevent them from joining a team they are strictly NOT in.
+                        // If playerTeam is None, we don't block.
                          if (playerTeam != (int)CsTeam.None && playerTeam != joiningTeam) {
-                             // This block prevents players from switching to a team they are NOT assigned to.
-                             // However, since we want guests to be able to play, we assume GetPlayerTeam
-                             // handles the assignment. If it returns None, we shouldn't block?
-                             // But let's stick to: if we know their team, block other teams.
                              return HookResult.Stop; 
                         }
                     }
@@ -411,7 +416,9 @@ namespace MatchZy
             RegisterEventHandler<EventPlayerChat>((@event, info) => {
 
                 int currentVersion = Api.GetVersion();
+                // Safe handling of UserId from index
                 int index = @event.Userid + 1;
+                // NativeAPI returns int here
                 var playerUserId = NativeAPI.GetUseridFromIndex(index);
 
                 var originalMessage = @event.Text.Trim();
@@ -422,6 +429,7 @@ namespace MatchZy
                 var messageCommandArg = parts.Length > 1 ? string.Join(' ', parts.Skip(1)) : string.Empty;
 
                 CCSPlayerController? player = null;
+                // TryGetValue expects int key
                 if (playerData.TryGetValue(playerUserId, out CCSPlayerController? value)) {
                     player = value;
                 }
@@ -429,8 +437,15 @@ namespace MatchZy
                 if (player == null) {
                     // Somehow we did not had the player in playerData, hence updating the maps again before getting the player
                     UpdatePlayersMap();
-                    player = playerData[playerUserId];
+                    if (playerData.ContainsKey(playerUserId)) {
+                        player = playerData[playerUserId];
+                    } else {
+                         // Fallback using Utilities if dictionary fails
+                         player = Utilities.GetPlayerFromUserid(playerUserId);
+                    }
                 }
+                
+                if (player == null) return HookResult.Continue;
 
                 // Handling player commands
                 if (commandActions.ContainsKey(message)) {
