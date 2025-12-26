@@ -144,7 +144,7 @@ namespace MatchZy
                 { ".forceend", OnEndMatchCommand },
                 { ".reloadmap", OnMapReloadCommand },
                 { ".settings", OnMatchSettingsCommand },
-                { ".whitelist", OnWLCommand },
+                { ".whitelist", CustomWLCommand }, // Updated to CustomWLCommand
                 { ".globalnades", OnSaveNadesAsGlobalCommand },
                 { ".reload_admins", OnReloadAdmins },
                 { ".tactics", OnPracCommand },
@@ -208,7 +208,8 @@ namespace MatchZy
                 { ".loadpos", OnLoadPosCommand}
             };
 
-            RegisterEventHandler<EventPlayerConnectFull>(EventPlayerConnectFullHandler);
+            // Register Custom Handler to override/bypass potential duplicate
+            RegisterEventHandler<EventPlayerConnectFull>(CustomPlayerConnectFullHandler); 
             RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnectHandler);
             RegisterEventHandler<EventCsWinPanelRound>(EventCsWinPanelRoundHandler, hookMode: HookMode.Pre);
             RegisterEventHandler<EventCsWinPanelMatch>(EventCsWinPanelMatchHandler);
@@ -259,8 +260,7 @@ namespace MatchZy
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         CsTeam targetTeam = GetPlayerTeam(player);
 
-                        // If GetPlayerTeam returns None, it means Open Mode (no teams defined)
-                        // Allow player to join any team.
+                        // Open Mode Logic: If team is None, allow join.
                         if (targetTeam == CsTeam.None) {
                             return HookResult.Continue;
                         }
@@ -555,9 +555,9 @@ namespace MatchZy
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
 
-        // --- UNIQUE DEFINITIONS START HERE ---
+        // --- RENAMED DEFINITIONS TO AVOID CONFLICTS ---
 
-        public HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+        public HookResult CustomPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
             if (player == null || !player.IsValid || player.IsBot) return HookResult.Continue;
@@ -577,10 +577,9 @@ namespace MatchZy
 
                 if (!isWhitelisted)
                 {
-                    // Kick only if whitelist is enabled
                     if (player.UserId.HasValue)
                     {
-                        Log($"[EventPlayerConnectFullHandler] Kicking player {player.PlayerName} ({steamId}) as they are not whitelisted.");
+                        Log($"[CustomPlayerConnectFullHandler] Kicking player {player.PlayerName} ({steamId}) as they are not whitelisted.");
                         Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not whitelisted!\"");
                     }
                     return HookResult.Continue;
@@ -595,7 +594,7 @@ namespace MatchZy
             return HookResult.Continue;
         }
 
-        public void OnWLCommand(CCSPlayerController? player, CommandInfo? command)
+        public void CustomWLCommand(CCSPlayerController? player, CommandInfo? command)
         {
             if (player == null) return;
             if (!IsPlayerAdmin(player, "css_whitelist", "@css/config")) {
