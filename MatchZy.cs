@@ -144,7 +144,7 @@ namespace MatchZy
                 { ".forceend", OnEndMatchCommand },
                 { ".reloadmap", OnMapReloadCommand },
                 { ".settings", OnMatchSettingsCommand },
-                { ".whitelist", CustomWLCommand }, // 使用自定義函數避免衝突
+                { ".whitelist", OnWLCommand }, // Uses OnWLCommand from ConsoleCommands.cs
                 { ".globalnades", OnSaveNadesAsGlobalCommand },
                 { ".reload_admins", OnReloadAdmins },
                 { ".tactics", OnPracCommand },
@@ -208,7 +208,6 @@ namespace MatchZy
                 { ".loadpos", OnLoadPosCommand}
             };
 
-            // 使用自定義的連線處理函數
             RegisterEventHandler<EventPlayerConnectFull>(CustomPlayerConnectFullHandler); 
             RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnectHandler);
             RegisterEventHandler<EventCsWinPanelRound>(EventCsWinPanelRoundHandler, hookMode: HookMode.Pre);
@@ -260,7 +259,7 @@ namespace MatchZy
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         CsTeam targetTeam = GetPlayerTeam(player);
 
-                        // 開放模式邏輯：如果是 None，允許加入
+                        // Open Mode Logic: If team is None, allow join.
                         if (targetTeam == CsTeam.None) {
                             return HookResult.Continue;
                         }
@@ -555,14 +554,12 @@ namespace MatchZy
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
 
-        // --- 新增與更名的函數，避免重複並包含邏輯 ---
-
         public HookResult CustomPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
             if (player == null || !player.IsValid || player.IsBot) return HookResult.Continue;
 
-            // 邏輯 1: 白名單檢查
+            // Logic 1: Whitelist Check
             if (isWhitelistRequired)
             {
                 var steamId = player.SteamID;
@@ -584,28 +581,17 @@ namespace MatchZy
             }
             else
             {
-                // 邏輯 2: 路人歡迎 (只有在白名單關閉時)
+                // Logic 2: Guest Welcome
                 PrintToPlayerChat(player, Localizer["matchzy.custom.guest_welcome"]);
             }
 
-            // 邏輯 3: 更新/觸發未準備玩家提示 (補回此呼叫)
+            // Logic 3: Update/Trigger Unready Message (FIXED: Added this call back)
             UnreadyPlayerMessage();
 
             return HookResult.Continue;
         }
 
-        public void CustomWLCommand(CCSPlayerController? player, CommandInfo? command)
-        {
-            if (player == null) return;
-            if (!IsPlayerAdmin(player, "css_whitelist", "@css/config")) {
-                SendPlayerNotAdminMessage(player);
-                return;
-            }
-            isWhitelistRequired = !isWhitelistRequired;
-            PrintToPlayerChat(player, Localizer["matchzy.cc.wl", isWhitelistRequired ? "Enabled" : "Disabled"]);
-        }
-
-        // --- 補回未準備玩家提示邏輯 ---
+        // --- RESTORED UNREADY PLAYER MESSAGE LOGIC ---
         public void UnreadyPlayerMessage()
         {
             if (isMatchLive || !readyAvailable) return;
@@ -624,11 +610,11 @@ namespace MatchZy
             if (!string.IsNullOrEmpty(unreadyPlayers))
             {
                 unreadyPlayers = unreadyPlayers.TrimEnd(',', ' ');
-                // 使用 json 中的鍵值
+                // Uses the specific key from your json to show the message
                 Server.PrintToChatAll(Localizer["matchzy.utility.unreadyplayers", unreadyPlayers]);
             }
             
-            // 重啟計時器邏輯
+            // Restart timer logic (Simplified for single file context)
             if (unreadyPlayerMessageTimer == null)
             {
                 unreadyPlayerMessageTimer = AddTimer(chatTimerDelay, UnreadyPlayerMessage);
