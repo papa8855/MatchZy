@@ -205,7 +205,34 @@ namespace MatchZy
                 { ".loadpos", OnLoadPosCommand}
             };
 
-            RegisterEventHandler<EventPlayerConnectFull>(EventPlayerConnectFullHandler);
+            RegisterEventHandler<EventPlayerConnectFull>((@event, info) => {
+                var player = @event.Userid;
+                if (player == null || !player.IsValid || player.IsBot || player.IsHLTV) return HookResult.Continue;
+                
+                // EVENT PLAYER CONNECT FULL HANDLER
+                
+                // Whitelist check Logic
+                // We STRICTLY check if whitelist is required manually (.whitelist on)
+                // If it is NOT required, we do NOT kick, even if a match is setup.
+                if (isWhitelistRequired) {
+                   if (!IsPlayerWhitelisted(player)) {
+                       Log($"[Whitelist] Player {player.PlayerName} ({player.SteamID}) is not on the whitelist. Kicking...");
+                       KickPlayer(player.UserId);
+                       return HookResult.Continue;
+                   }
+                }
+
+                // If we are here, the player is allowed to stay.
+                // If a match is setup, welcome them as a guest if they are not strictly in the team list (implied by context).
+                if (isMatchSetup)
+                {
+                     PrintToChat(player, Localizer["matchzy.custom.guest_welcome"]);
+                }
+
+                EventPlayerConnectFullHandler(@event, info);
+                return HookResult.Continue;
+            });
+            
             RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnectHandler);
             RegisterEventHandler<EventCsWinPanelRound>(EventCsWinPanelRoundHandler, hookMode: HookMode.Pre);
             RegisterEventHandler<EventCsWinPanelMatch>(EventCsWinPanelMatchHandler);
@@ -245,6 +272,9 @@ namespace MatchZy
 
                 CsTeam playerTeam = GetPlayerTeam(player);
 
+                // We do NOT kick here. We only switch teams.
+                // If GetPlayerTeam returns the guest's current team (due to MatchManagement modification),
+                // SwitchPlayerTeam will effectively keep them there.
                 SwitchPlayerTeam(player, playerTeam);
 
                 return HookResult.Continue;
@@ -255,8 +285,21 @@ namespace MatchZy
                 if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         int playerTeam = (int)GetPlayerTeam(player);
-                        if (joiningTeam != playerTeam) {
-                            return HookResult.Stop;
+                        
+                        // Relaxed Team Join Logic for Guests
+                        // If player is officially on a team (from JSON), block them from joining the wrong one.
+                        // If player is a guest (GetPlayerTeam returns their current team or None-logic handled in MatchManagement),
+                        // we generally allow the join or let the game handle it, unless explicitly restricted by other modes.
+                        
+                        // Note: If MatchManagement.cs GetPlayerTeam returns the current team for guests, 
+                        // playerTeam will equal joiningTeam (if they are already there) or the new team if they switched.
+                        
+                         if (playerTeam != (int)CsTeam.None && playerTeam != joiningTeam) {
+                             // This block prevents players from switching to a team they are NOT assigned to.
+                             // However, since we want guests to be able to play, we assume GetPlayerTeam
+                             // handles the assignment. If it returns None, we shouldn't block?
+                             // But let's stick to: if we know their team, block other teams.
+                             return HookResult.Stop; 
                         }
                     }
                 }
