@@ -540,11 +540,15 @@ namespace MatchZy
             var steamId = player.SteamID;
             try
             {
-                // Check if players are defined in JSON (if null or empty, it's effectively an open match for that team)
-                // However, GetPlayerTeam is used to see if a player BELONGS to a team.
-                // If the JSON list is empty, standard logic returns None.
-                // Our MatchZy.cs EventPlayerConnectFullHandler handles the "Don't Kick" logic if isWhitelistRequired is false.
-                
+                // Check if teams are defined. If team list is empty, treat as open mode.
+                bool isTeam1Defined = matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers.HasValues;
+                bool isTeam2Defined = matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers.HasValues;
+
+                if (!isTeam1Defined && !isTeam2Defined)
+                {
+                    return CsTeam.None; // Open mode, allow strangers to choose
+                }
+
                 if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
                 {
                     if (teamSides[matchzyTeam1] == "CT")
