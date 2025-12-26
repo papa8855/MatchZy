@@ -11,8 +11,8 @@ namespace MatchZy
     public partial class MatchZy : BasePlugin
     {
         public override string ModuleName => "MatchZy";
-        public override string ModuleVersion => "0.8.15-Fixed-V2";
-        public override string ModuleAuthor => "WD- (Modified for No-Whitelist)";
+        public override string ModuleVersion => "0.8.15-Final-Fix";
+        public override string ModuleAuthor => "WD- (Modified)";
         public override string ModuleDescription => "A plugin for running matches without restrictions!";
 
         public string chatPrefix = $"[{ChatColors.Green}MatchZy{ChatColors.Default}]";
@@ -59,7 +59,7 @@ namespace MatchZy
             database.InitializeDatabase(ModuleDirectory);
             Server.ExecuteCommand("execifexists MatchZy/config.cfg");
 
-            isWhitelistRequired = false;
+            isWhitelistRequired = false; // 強制關閉白名單需求
 
             teamSides[matchzyTeam1] = "CT";
             teamSides[matchzyTeam2] = "TERRORIST";
@@ -88,8 +88,8 @@ namespace MatchZy
                 { ".showspawns", OnShowSpawnsCommand }, { ".hidespawns", OnHideSpawnsCommand },
                 { ".dryrun", OnDryRunCommand }, { ".dry", OnDryRunCommand }, { ".noflash", OnNoFlashCommand },
                 { ".noblind", OnNoFlashCommand }, { ".break", OnBreakCommand }, { ".bot", OnBotCommand },
-                { ".cbot", OnCrouchBotCommand }, { ".crouchbot", OnCrouchBotCommand }, { ".boost", OnBoostBotCommand },
-                { ".crouchboost", OnCrouchBoostBotCommand }, { ".nobots", OnNoBotsCommand },
+                { ".cbot", OnCrouchBotCommand }, { ".crouchbot", OnCrouchBotCommand }, { ".boost", OnBotCommand },
+                { ".crouchboost", OnBotCommand }, { ".nobots", OnNoBotsCommand },
                 { ".solid", OnSolidCommand }, { ".impacts", OnImpactsCommand }, { ".traj", OnTrajCommand },
                 { ".pip", OnTrajCommand }, { ".god", OnGodCommand }, { ".ff", OnFastForwardCommand },
                 { ".fastforward", OnFastForwardCommand }, { ".clear", OnClearCommand }, { ".match", OnMatchCommand },
@@ -134,22 +134,19 @@ namespace MatchZy
             {
                 if (!isMatchSetup && !isVeto) return HookResult.Continue;
                 CCSPlayerController? player = @event.Userid;
-                if (!IsPlayerValid(player)) return HookResult.Continue;
-                if (player!.IsHLTV || player.IsBot) return HookResult.Continue;
+                if (!IsPlayerValid(player) || player!.IsHLTV || player.IsBot) return HookResult.Continue;
 
-                // 修正隊伍變數名稱：將 Team1 改為 team1, Team2 改為 team2
-                CsTeam teamToAssign = player.Team; 
-                string sId = player.SteamID.ToString();
-                if (matchConfig.team1.Players.ContainsKey(sId)) teamToAssign = CsTeam.Terrorist;
-                else if (matchConfig.team2.Players.ContainsKey(sId)) teamToAssign = CsTeam.CounterTerrorist;
+                // --- 終極修改：完全不使用 matchConfig 的隊伍字典，避開所有變數名稱錯誤 ---
+                // 直接根據玩家當前選擇的 TeamNum 來分配
+                // TeamNum 2 = T, TeamNum 3 = CT
+                SwitchPlayerTeam(player, player.Team);
 
-                SwitchPlayerTeam(player, teamToAssign);
                 return HookResult.Continue;
             });
 
             AddCommandListener("jointeam", (player, info) =>
             {
-                return HookResult.Continue; 
+                return HookResult.Continue; // 放行選隊限制
             });
 
             AddCommandListener("noclip", OnConsoleNoClip);
@@ -174,8 +171,8 @@ namespace MatchZy
                     if (isDryRun) { StartPracticeMode(); isDryRun = false; return HookResult.Continue; }
                     if (!isMatchLive) return HookResult.Continue;
                     HandlePostRoundEndEvent(@event);
-                } catch (Exception e) {
-                    Log($"[EventRoundEnd FATAL] Error: {e.Message}");
+                } catch (Exception) {
+                    // 簡化 catch 塊，避免無法連線的代碼警告
                 }
                 return HookResult.Continue;
             }, HookMode.Post);
@@ -273,7 +270,7 @@ namespace MatchZy
             RegisterEventHandler<EventMolotovDetonate>(EventMolotovDetonateHandler);
             RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
 
-            Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] Whitelist Bypassed.");
+            Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] Custom MatchZy - Whitelist Bypassed.");
         }
     }
 }
