@@ -71,10 +71,7 @@ namespace MatchZy
         // Game Config
         public bool isKnifeRequired = true;
         public int minimumReadyRequired = 2; // Number of ready players required start the match. If set to 0, all connected players have to ready-up to start the match.
-        
-        // MODIFIED: Default set to false to allow guests by default
-        public bool isWhitelistRequired = false; 
-        
+        public bool isWhitelistRequired = false;
         public bool isSaveNadesAsGlobalEnabled = false;
 
         public bool isPlayOutEnabled = false;
@@ -248,8 +245,6 @@ namespace MatchZy
 
                 CsTeam playerTeam = GetPlayerTeam(player);
 
-                // If playerTeam is None (Guest), MatchZy usually doesn't force switch.
-                // This allows guests to pick a team.
                 SwitchPlayerTeam(player, playerTeam);
 
                 return HookResult.Continue;
@@ -260,9 +255,7 @@ namespace MatchZy
                 if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         int playerTeam = (int)GetPlayerTeam(player);
-                        // If player has a specific team assigned (not None), restrict them.
-                        // If playerTeam is None (0), it usually means guest, so we allow unless strict mode.
-                        if (playerTeam != 0 && joiningTeam != playerTeam) {
+                        if (joiningTeam != playerTeam) {
                             return HookResult.Stop;
                         }
                     }
@@ -552,65 +545,48 @@ namespace MatchZy
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
 
-        // New Event Handler for Player Connect
-        private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+        public HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
+            if (player == null || !player.IsValid || player.IsBot) return HookResult.Continue;
 
-            if (!IsPlayerValid(player)) return HookResult.Continue;
-
-            // Existing logic to update admin map or other player data if necessary
-            if (player!.UserId.HasValue)
+            // Handle whitelist kicking
+            if (isWhitelistRequired)
             {
-                if (!playerData.ContainsKey(player.UserId.Value))
+                var steamId = player.SteamID;
+                bool isWhitelisted = false;
+                if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
                 {
-                    playerData[player.UserId.Value] = player;
+                    isWhitelisted = true;
+                }
+                else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null)
+                {
+                    isWhitelisted = true;
+                }
+                else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
+                {
+                    isWhitelisted = true;
+                }
+
+                if (!isWhitelisted)
+                {
+                     if (player.UserId.HasValue) 
+                     {
+                        Log($"[EventPlayerConnectFullHandler] Kicking player {player.PlayerName} ({steamId}) as they are not whitelisted.");
+                        Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not whitelisted!\"");
+                     }
+                     return HookResult.Continue;
                 }
             }
-
-            if (isMatchSetup)
+            else 
             {
-                CsTeam playerTeam = GetPlayerTeam(player);
-
-                if (playerTeam == CsTeam.None)
-                {
-                    // If whitelist is required, kick the guest player.
-                    if (isWhitelistRequired)
-                    {
-                        Log($"[EventPlayerConnectFull] Kicking {player.PlayerName} because they are not in the match (Whitelist active).");
-                        if (player.UserId.HasValue)
-                        {
-                            Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not part of this match!\"");
-                        }
-                        return HookResult.Continue;
-                    }
-                    else
-                    {
-                        // If whitelist is NOT required, allow the guest and send welcome message.
-                        player.PrintToChat(Localizer["matchzy.custom.guest_welcome"]);
-                    }
-                }
-                else
-                {
-                    // Player is in the roster, maybe send a different welcome message or do nothing.
-                }
+                // If whitelist is disabled, or they passed the whitelist, allow join.
+                // If it's an "Open" game (checked in GetPlayerTeam logic effectively), send welcome.
+                // We just assume if not kicking, and not strictly bound, they are a guest/player.
+                PrintToPlayerChat(player, Localizer["matchzy.custom.guest_welcome"]);
             }
 
             return HookResult.Continue;
-        }
-
-        // Handler for .whitelist command
-        [ConsoleCommand("css_whitelist", "Toggles Whitelist")]
-        public void OnWLCommand(CCSPlayerController? player, CommandInfo? command)
-        {
-            if (!IsPlayerAdmin(player, "css_settings", "@css/config")) {
-                SendPlayerNotAdminMessage(player);
-                return;
-            }
-            
-            isWhitelistRequired = !isWhitelistRequired;
-            string status = isWhitelistRequired ? "Enabled" : "Disabled";
-            if(player != null) ReplyToUserCommand(player, Localizer["matchzy.cc.wl", status]);
         }
     }
 }
