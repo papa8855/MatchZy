@@ -36,6 +36,7 @@ namespace MatchZy
             if (player != null) return;
             string args = command.ArgString;
 
+            // Ensure default is false if parsing fails or checks logic
             isWhitelistRequired = bool.TryParse(args, out bool isWhitelistRequiredValue) ? isWhitelistRequiredValue : args != "0" && isWhitelistRequired;
         }
         
