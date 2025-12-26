@@ -540,7 +540,11 @@ namespace MatchZy
             var steamId = player.SteamID;
             try
             {
-                if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
+                bool isTeam1Defined = matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers.HasValues;
+                bool isTeam2Defined = matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers.HasValues;
+
+                // Check if players are explicitly in a team in the JSON
+                if (isTeam1Defined && matchzyTeam1.teamPlayers![steamId.ToString()] != null)
                 {
                     if (teamSides[matchzyTeam1] == "CT")
                     {
@@ -552,7 +556,7 @@ namespace MatchZy
                     }
 
                 }
-                else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null)
+                else if (isTeam2Defined && matchzyTeam2.teamPlayers![steamId.ToString()] != null)
                 {
                     if (teamSides[matchzyTeam2] == "CT")
                     {
@@ -566,6 +570,14 @@ namespace MatchZy
                 else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
                 {
                     playerTeam = CsTeam.Spectator;
+                }
+                else 
+                {
+                    // If both teams are "open" (no players defined in JSON), allow the player to be on their current team
+                    if (!isTeam1Defined && !isTeam2Defined)
+                    {
+                        playerTeam = (CsTeam)player.TeamNum;
+                    }
                 }
             }
             catch (Exception ex)
