@@ -540,13 +540,17 @@ namespace MatchZy
             var steamId = player.SteamID;
             try
             {
-                // Check if teams are defined. If team list is empty, treat as open mode.
-                bool isTeam1Defined = matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers.HasValues;
-                bool isTeam2Defined = matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers.HasValues;
+                // Check if both teams are empty (Open Mode)
+                // Using .HasValues to check if there are actual players listed
+                bool isTeam1Empty = matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues;
+                bool isTeam2Empty = matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues;
 
-                if (!isTeam1Defined && !isTeam2Defined)
+                // If both teams are undefined/empty in the JSON, treat as Open Mode.
+                // Returning CsTeam.None here is intentional; the 'jointeam' listener in MatchZy.cs 
+                // has been updated to ALLOW joining if GetPlayerTeam returns None in this scenario.
+                if (isTeam1Empty && isTeam2Empty)
                 {
-                    return CsTeam.None; // Open mode, allow strangers to choose
+                    return CsTeam.None;
                 }
 
                 if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
