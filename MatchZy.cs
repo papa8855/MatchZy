@@ -66,8 +66,9 @@ namespace MatchZy
         // Game Config
         public bool isKnifeRequired = true;
         public int minimumReadyRequired = 2;
-        // 修改點 1：強制將初始值改為 false
-        public bool isWhitelistRequired = false; 
+        // Number of ready players required start the match. If set to 0, all connected players have to ready-up to start the match.
+        [cite_start]// 這裡就是第 20 行 
+        public bool isWhitelistRequired = false;
         public bool isSaveNadesAsGlobalEnabled = false;
 
         public bool isPlayOutEnabled = false;
@@ -213,11 +214,11 @@ namespace MatchZy
                 { ".loadpos", OnLoadPosCommand}
             };
             
-            // 修改點 2：針對 JSON 覆蓋變數的物理攔截
-            // 無論 JSON 怎麼設，玩家連線瞬間強制撥回 false
+            [cite_start]// 這裡就是第 47 行的關鍵修改 
+            // 直接攔截事件並強制放行，不執行原本的踢人檢查
             RegisterEventHandler<EventPlayerConnectFull>((@event, info) => {
                 isWhitelistRequired = false; 
-                return EventPlayerConnectFullHandler(@event, info);
+                return HookResult.Continue; 
             }, HookMode.Pre);
 
             RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnectHandler);
@@ -400,7 +401,7 @@ namespace MatchZy
                     player = playerData[playerUserId];
                 }
 
-                // Handling player commands
+                [cite_start]// 指令處理部分 [cite: 79-106]
                 if (commandActions.ContainsKey(message)) {
                     commandActions[message](player, null);
                 }
@@ -525,6 +526,8 @@ namespace MatchZy
 
                 return HookResult.Continue;
             });
+
+            [cite_start]// 第 405 行就在這附近 [cite: 40, 107-110]
             RegisterEventHandler<EventPlayerBlind>((@event, info) =>
             {
                 CCSPlayerController? player = @event.Userid;
@@ -553,7 +556,7 @@ namespace MatchZy
             RegisterEventHandler<EventMolotovDetonate>(EventMolotovDetonateHandler);
             RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
 
-            Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
+            Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] Fixed for papa8855");
         }
     }
 }
