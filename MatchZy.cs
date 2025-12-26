@@ -97,27 +97,13 @@ namespace MatchZy
                 { ".hidespawns", OnHideSpawnsCommand }, { ".dryrun", OnDryRunCommand }, { ".dry", OnDryRunCommand },
                 { ".noflash", OnNoFlashCommand }, { ".noblind", OnNoFlashCommand }, { ".break", OnBreakCommand },
                 { ".bot", OnBotCommand }, { ".cbot", OnCrouchBotCommand }, { ".crouchbot", OnCrouchBotCommand },
-                { ".boost", OnBoostBotCommand }, { ".crouchboost", OnCrouchBoostBotCommand }, { ".nobots", OnNoBotsCommand },
-                { ".solid", OnSolidCommand }, { ".impacts", OnImpactsCommand }, { ".traj", OnTrajCommand },
-                { ".pip", OnTrajCommand }, { ".god", OnGodCommand }, { ".ff", OnFastForwardCommand },
-                { ".fastforward", OnFastForwardCommand }, { ".clear", OnClearCommand }, { ".match", OnMatchCommand },
-                { ".uncoach", OnUnCoachCommand }, { ".exitprac", OnMatchCommand }, { ".stop", OnStopCommand },
-                { ".help", OnHelpCommand }, { ".t", OnTCommand }, { ".ct", OnCTCommand }, { ".spec", OnSpecCommand },
-                { ".fas", OnFASCommand }, { ".watchme", OnFASCommand }, { ".last", OnLastCommand },
-                { ".throw", OnRethrowCommand }, { ".rethrow", OnRethrowCommand }, { ".rt", OnRethrowCommand },
-                { ".throwsmoke", OnRethrowSmokeCommand }, { ".rethrowsmoke", OnRethrowSmokeCommand },
-                { ".thrownade", OnRethrowGrenadeCommand }, { ".rethrownade", OnRethrowGrenadeCommand },
-                { ".rethrowgrenade", OnRethrowGrenadeCommand }, { ".throwgrenade", OnRethrowGrenadeCommand },
-                { ".rethrowflash", OnRethrowFlashCommand }, { ".throwflash", OnRethrowFlashCommand },
-                { ".rethrowdecoy", OnRethrowDecoyCommand }, { ".throwdecoy", OnRethrowDecoyCommand },
-                { ".throwmolotov", OnRethrowMolotovCommand }, { ".rethrowmolotov", OnRethrowMolotovCommand },
-                { ".timer", OnTimerCommand }, { ".lastindex", OnLastIndexCommand }, { ".bestspawn", OnBestSpawnCommand },
-                { ".worstspawn", OnWorstSpawnCommand }, { ".bestctspawn", OnBestCTSpawnCommand },
-                { ".worstctspawn", OnWorstCTSpawnCommand }, { ".besttspawn", OnBestTSpawnCommand },
-                { ".worsttspawn", OnWorstTSpawnCommand }, { ".savepos", OnSavePosCommand}, { ".loadpos", OnLoadPosCommand}
+                { ".boost", OnBotCommand }, { ".solid", OnSolidCommand }, { ".impacts", OnImpactsCommand }, 
+                { ".traj", OnTrajCommand }, { ".god", OnGodCommand }, { ".clear", OnClearCommand }, 
+                { ".match", OnMatchCommand }, { ".stop", OnStopCommand }, { ".help", OnHelpCommand }, 
+                { ".savepos", OnSavePosCommand}, { ".loadpos", OnLoadPosCommand}
             };
 
-            [cite_start]// 手術位置：強制在連線時關閉白名單 [cite: 48]
+            [cite_start]// 修改位置：強制關閉白名單需求 
             RegisterEventHandler<EventPlayerConnectFull>((@event, info) => {
                 isWhitelistRequired = false; 
                 return EventPlayerConnectFullHandler(@event, info);
@@ -131,35 +117,6 @@ namespace MatchZy
             RegisterEventHandler<EventPlayerGivenC4>(EventPlayerGivenC4);
             RegisterEventHandler<EventPlayerDeath>(EventPlayerDeathPreHandler, HookMode.Pre);
             RegisterListener<Listeners.OnEntitySpawned>(OnEntitySpawnedHandler);
-            
-            RegisterEventHandler<EventPlayerTeam>((@event, info) => {
-                CCSPlayerController? player = @event.Userid;
-                if (!IsPlayerValid(player)) return HookResult.Continue;
-                if (matchzyTeam1.coach.Contains(player!) || matchzyTeam2.coach.Contains(player!)) {
-                    @event.Silent = true;
-                    return HookResult.Changed;
-                }
-                return HookResult.Continue;
-            }, HookMode.Pre);
-
-            RegisterEventHandler<EventRoundEnd>((@event, info) => {
-                if (!isKnifeRound) return HookResult.Continue;
-                DetermineKnifeWinner();
-                @event.Winner = knifeWinner;
-                @event.Reason = (knifeWinner == 3) ? 8 : (knifeWinner == 2 ? 9 : 10);
-                isSideSelectionPhase = true;
-                isKnifeRound = false;
-                StartAfterKnifeWarmup();
-                return HookResult.Changed;
-            }, HookMode.Pre);
-
-            RegisterListener<Listeners.OnMapStart>(mapName => { 
-                AddTimer(1.0f, () => {
-                    if (!isMatchSetup) { AutoStart(); return; }
-                    if (isWarmup) StartWarmup();
-                    if (isPractice) StartPracticeMode();
-                });
-            });
 
             RegisterEventHandler<EventSmokegrenadeDetonate>(EventSmokegrenadeDetonateHandler);
             RegisterEventHandler<EventFlashbangDetonate>(EventFlashbangDetonateHandler);
