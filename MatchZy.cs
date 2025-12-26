@@ -252,14 +252,15 @@ namespace MatchZy
 
             AddCommandListener("jointeam", (player, info) =>
             {
-                // Unlocked team joining for public/pug play
+                if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
+                    if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
+                        int playerTeam = (int)GetPlayerTeam(player);
+                        if (joiningTeam != playerTeam) {
+                            return HookResult.Stop;
+                        }
+                    }
+                }
                 return HookResult.Continue;
-            });
-
-            // Prevent kicking of non-whitelisted players
-            AddCommandListener("kickid", (player, info) =>
-            {
-                return HookResult.Stop;
             });
 
             AddCommandListener("noclip", OnConsoleNoClip); // Override noclip
