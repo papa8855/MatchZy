@@ -1,19 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Threading.Tasks;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Modules.Commands;
-using CounterStrikeSharp.API.Modules.Cvars;
-using CounterStrikeSharp.API.Modules.Entities;
-using CounterStrikeSharp.API.Modules.Events;
-using CounterStrikeSharp.API.Modules.Memory;
-using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
+using CounterStrikeSharp.API.Core.Attributes;
+using CounterStrikeSharp.API.Modules.Events;
+
 
 namespace MatchZy
 {
@@ -80,7 +71,10 @@ namespace MatchZy
         // Game Config
         public bool isKnifeRequired = true;
         public int minimumReadyRequired = 2; // Number of ready players required start the match. If set to 0, all connected players have to ready-up to start the match.
-        public bool isWhitelistRequired = false;
+        
+        // MODIFIED: Default set to false to allow guests by default
+        public bool isWhitelistRequired = false; 
+        
         public bool isSaveNadesAsGlobalEnabled = false;
 
         public bool isPlayOutEnabled = false;
@@ -214,42 +208,7 @@ namespace MatchZy
                 { ".loadpos", OnLoadPosCommand}
             };
 
-            RegisterEventHandler<EventPlayerConnectFull>((@event, info) => {
-                CCSPlayerController? player = @event.Userid;
-                
-                // 1. Basic Validation
-                if (player == null || !player.IsValid || player.IsBot || player.IsHLTV) return HookResult.Continue;
-                
-                // 2. Whitelist Check Logic
-                // Only enforce kick if the global whitelist setting is ON.
-                if (isWhitelistRequired) {
-                    // Uses IsPlayerAdmin to check permissions (requires "css_whitelist" flag or "@css/whitelist" group)
-                    // This leverages the existing admin permission system or loadedAdmins.
-                    if (!IsPlayerAdmin(player, "css_whitelist", "@css/whitelist")) {
-                        Log($"[Whitelist] Player {player.PlayerName} ({player.SteamID}) is not on the whitelist. Kicking...");
-                        
-                        // Execute Kick using Server Command to ensure proper execution
-                        if (player.UserId.HasValue)
-                        {
-                            Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not whitelisted!\"");
-                        }
-                        return HookResult.Continue;
-                    }
-                }
-
-                // 3. Guest Welcome Logic
-                // If whitelist is OFF (or player passed it), and a match is setup:
-                if (isMatchSetup)
-                {
-                    // Correct PrintToChat usage
-                    player.PrintToChat(Localizer["matchzy.custom.guest_welcome"]);
-                }
-
-                // 4. Call original handler logic
-                EventPlayerConnectFullHandler(@event, info);
-                return HookResult.Continue;
-            });
-
+            RegisterEventHandler<EventPlayerConnectFull>(EventPlayerConnectFullHandler);
             RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnectHandler);
             RegisterEventHandler<EventCsWinPanelRound>(EventCsWinPanelRoundHandler, hookMode: HookMode.Pre);
             RegisterEventHandler<EventCsWinPanelMatch>(EventCsWinPanelMatchHandler);
@@ -289,6 +248,8 @@ namespace MatchZy
 
                 CsTeam playerTeam = GetPlayerTeam(player);
 
+                // If playerTeam is None (Guest), MatchZy usually doesn't force switch.
+                // This allows guests to pick a team.
                 SwitchPlayerTeam(player, playerTeam);
 
                 return HookResult.Continue;
@@ -299,12 +260,10 @@ namespace MatchZy
                 if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         int playerTeam = (int)GetPlayerTeam(player);
-                        
-                        // Relaxed logic: If GetPlayerTeam returns their current team (for guests),
-                        // allow them to stay, but prevent them from joining a team they are strictly NOT in.
-                        // If playerTeam is None, we don't block.
-                         if (playerTeam != (int)CsTeam.None && playerTeam != joiningTeam) {
-                             return HookResult.Stop; 
+                        // If player has a specific team assigned (not None), restrict them.
+                        // If playerTeam is None (0), it usually means guest, so we allow unless strict mode.
+                        if (playerTeam != 0 && joiningTeam != playerTeam) {
+                            return HookResult.Stop;
                         }
                     }
                 }
@@ -416,9 +375,7 @@ namespace MatchZy
             RegisterEventHandler<EventPlayerChat>((@event, info) => {
 
                 int currentVersion = Api.GetVersion();
-                // Safe handling of UserId from index
                 int index = @event.Userid + 1;
-                // NativeAPI returns int here
                 var playerUserId = NativeAPI.GetUseridFromIndex(index);
 
                 var originalMessage = @event.Text.Trim();
@@ -429,7 +386,6 @@ namespace MatchZy
                 var messageCommandArg = parts.Length > 1 ? string.Join(' ', parts.Skip(1)) : string.Empty;
 
                 CCSPlayerController? player = null;
-                // TryGetValue expects int key
                 if (playerData.TryGetValue(playerUserId, out CCSPlayerController? value)) {
                     player = value;
                 }
@@ -437,15 +393,8 @@ namespace MatchZy
                 if (player == null) {
                     // Somehow we did not had the player in playerData, hence updating the maps again before getting the player
                     UpdatePlayersMap();
-                    if (playerData.ContainsKey(playerUserId)) {
-                        player = playerData[playerUserId];
-                    } else {
-                         // Fallback using Utilities if dictionary fails
-                         player = Utilities.GetPlayerFromUserid(playerUserId);
-                    }
+                    player = playerData[playerUserId];
                 }
-                
-                if (player == null) return HookResult.Continue;
 
                 // Handling player commands
                 if (commandActions.ContainsKey(message)) {
@@ -601,6 +550,67 @@ namespace MatchZy
             RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
 
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
+        }
+
+        // New Event Handler for Player Connect
+        private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+        {
+            CCSPlayerController? player = @event.Userid;
+
+            if (!IsPlayerValid(player)) return HookResult.Continue;
+
+            // Existing logic to update admin map or other player data if necessary
+            if (player!.UserId.HasValue)
+            {
+                if (!playerData.ContainsKey(player.UserId.Value))
+                {
+                    playerData[player.UserId.Value] = player;
+                }
+            }
+
+            if (isMatchSetup)
+            {
+                CsTeam playerTeam = GetPlayerTeam(player);
+
+                if (playerTeam == CsTeam.None)
+                {
+                    // If whitelist is required, kick the guest player.
+                    if (isWhitelistRequired)
+                    {
+                        Log($"[EventPlayerConnectFull] Kicking {player.PlayerName} because they are not in the match (Whitelist active).");
+                        if (player.UserId.HasValue)
+                        {
+                            Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not part of this match!\"");
+                        }
+                        return HookResult.Continue;
+                    }
+                    else
+                    {
+                        // If whitelist is NOT required, allow the guest and send welcome message.
+                        player.PrintToChat(Localizer["matchzy.custom.guest_welcome"]);
+                    }
+                }
+                else
+                {
+                    // Player is in the roster, maybe send a different welcome message or do nothing.
+                }
+            }
+
+            return HookResult.Continue;
+        }
+
+        // Handler for .whitelist command
+        [ConsoleCommand("css_whitelist", "Toggles Whitelist")]
+        public void OnWLCommand(CCSPlayerController? player, CommandInfo? command)
+        {
+            if (!IsPlayerAdmin(player, "css_settings", "@css/config")) {
+                SendPlayerNotAdminMessage(player);
+                return;
+            }
+            
+            isWhitelistRequired = !isWhitelistRequired;
+            string status = isWhitelistRequired ? "Enabled" : "Disabled";
+            if(player != null) ReplyToUserCommand(player, Localizer["matchzy.cc.wl", status]);
         }
     }
 }
