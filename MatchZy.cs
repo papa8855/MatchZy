@@ -223,9 +223,9 @@ namespace MatchZy
                 // 2. Whitelist Check Logic
                 // Only enforce kick if the global whitelist setting is ON.
                 if (isWhitelistRequired) {
-                    // Assuming Database class has IsPlayerWhitelisted. 
-                    // If not, this needs to be matched to your Database.cs implementation.
-                    if (!database.IsPlayerWhitelisted(player.SteamID.ToString())) {
+                    // Uses IsPlayerAdmin to check permissions (requires "css_whitelist" flag or "@css/whitelist" group)
+                    // This leverages the existing admin permission system or loadedAdmins.
+                    if (!IsPlayerAdmin(player, "css_whitelist", "@css/whitelist")) {
                         Log($"[Whitelist] Player {player.PlayerName} ({player.SteamID}) is not on the whitelist. Kicking...");
                         
                         // Execute Kick using Server Command to ensure proper execution
