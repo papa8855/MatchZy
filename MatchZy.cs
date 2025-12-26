@@ -144,7 +144,7 @@ namespace MatchZy
                 { ".forceend", OnEndMatchCommand },
                 { ".reloadmap", OnMapReloadCommand },
                 { ".settings", OnMatchSettingsCommand },
-                { ".whitelist", CustomWLCommand }, // Updated to CustomWLCommand
+                { ".whitelist", CustomWLCommand }, // Use Renamed Command
                 { ".globalnades", OnSaveNadesAsGlobalCommand },
                 { ".reload_admins", OnReloadAdmins },
                 { ".tactics", OnPracCommand },
