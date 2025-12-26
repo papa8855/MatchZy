@@ -4,7 +4,7 @@ using System.Linq;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
-using CounterStrikeSharp.API.Modules.Commands; // 確保在上方
+using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Events;
 using CounterStrikeSharp.API.Modules.Utils;
 using CounterStrikeSharp.API.Modules.Timers;
@@ -257,8 +257,15 @@ namespace MatchZy
             {
                 if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
-                        int playerTeam = (int)GetPlayerTeam(player);
-                        if (joiningTeam != playerTeam) {
+                        CsTeam targetTeam = GetPlayerTeam(player);
+
+                        // 邏輯修正：如果 GetPlayerTeam 回傳 None，代表沒有特定隊伍限制（開放模式）
+                        // 這種情況下我們應該允許玩家加入他們想加入的隊伍，而不是阻擋。
+                        if (targetTeam == CsTeam.None) {
+                            return HookResult.Continue;
+                        }
+
+                        if (joiningTeam != (int)targetTeam) {
                             return HookResult.Stop;
                         }
                     }
@@ -568,6 +575,7 @@ namespace MatchZy
 
                 if (!isWhitelisted)
                 {
+                    // Fix: Check .HasValue before accessing .Value and use correct type
                     if (player.UserId.HasValue)
                     {
                         Log($"[EventPlayerConnectFullHandler] Kicking player {player.PlayerName} ({steamId}) as they are not whitelisted.");
@@ -584,6 +592,18 @@ namespace MatchZy
             }
 
             return HookResult.Continue;
+        }
+        
+        // This function was requested to be in MatchZy.cs to avoid duplicates elsewhere
+        public void OnWLCommand(CCSPlayerController? player, CommandInfo? command)
+        {
+            if (player == null) return;
+            if (!IsPlayerAdmin(player, "css_whitelist", "@css/config")) {
+                SendPlayerNotAdminMessage(player);
+                return;
+            }
+            isWhitelistRequired = !isWhitelistRequired;
+            PrintToPlayerChat(player, Localizer["matchzy.cc.wl", isWhitelistRequired ? "Enabled" : "Disabled"]);
         }
     }
 }
