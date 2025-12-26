@@ -11,7 +11,7 @@ namespace MatchZy
     public partial class MatchZy : BasePlugin
     {
         public override string ModuleName => "MatchZy";
-        public override string ModuleVersion => "0.8.15-Fixed";
+        public override string ModuleVersion => "0.8.15-Fixed-V2";
         public override string ModuleAuthor => "WD- (Modified for No-Whitelist)";
         public override string ModuleDescription => "A plugin for running matches without restrictions!";
 
@@ -59,7 +59,6 @@ namespace MatchZy
             database.InitializeDatabase(ModuleDirectory);
             Server.ExecuteCommand("execifexists MatchZy/config.cfg");
 
-            // 強制關閉白名單
             isWhitelistRequired = false;
 
             teamSides[matchzyTeam1] = "CT";
@@ -138,12 +137,11 @@ namespace MatchZy
                 if (!IsPlayerValid(player)) return HookResult.Continue;
                 if (player!.IsHLTV || player.IsBot) return HookResult.Continue;
 
-                // --- 修改重點：內聯判定邏輯，不使用會造成重複定義的函數 ---
+                // 修正隊伍變數名稱：將 Team1 改為 team1, Team2 改為 team2
                 CsTeam teamToAssign = player.Team; 
                 string sId = player.SteamID.ToString();
-                if (matchConfig.Team1.Players.ContainsKey(sId)) teamToAssign = CsTeam.Terrorist;
-                else if (matchConfig.Team2.Players.ContainsKey(sId)) teamToAssign = CsTeam.CounterTerrorist;
-                // 如果都沒有，就維持 player.Team (路人選哪隊就是哪隊)
+                if (matchConfig.team1.Players.ContainsKey(sId)) teamToAssign = CsTeam.Terrorist;
+                else if (matchConfig.team2.Players.ContainsKey(sId)) teamToAssign = CsTeam.CounterTerrorist;
 
                 SwitchPlayerTeam(player, teamToAssign);
                 return HookResult.Continue;
@@ -151,7 +149,7 @@ namespace MatchZy
 
             AddCommandListener("jointeam", (player, info) =>
             {
-                return HookResult.Continue; // 放行選隊限制
+                return HookResult.Continue; 
             });
 
             AddCommandListener("noclip", OnConsoleNoClip);
@@ -176,11 +174,10 @@ namespace MatchZy
                     if (isDryRun) { StartPracticeMode(); isDryRun = false; return HookResult.Continue; }
                     if (!isMatchLive) return HookResult.Continue;
                     HandlePostRoundEndEvent(@event);
-                    return HookResult.Continue;
                 } catch (Exception e) {
                     Log($"[EventRoundEnd FATAL] Error: {e.Message}");
-                    return HookResult.Continue;
                 }
+                return HookResult.Continue;
             }, HookMode.Post);
 
             RegisterListener<Listeners.OnMapStart>(mapName => { 
