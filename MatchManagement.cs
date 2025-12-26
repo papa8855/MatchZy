@@ -380,6 +380,15 @@ namespace MatchZy
                 await SendEventAsync(seriesStartedEvent);
             });
 
+            // Check if teams are "Open" (no players defined in JSON) and notify
+            bool isT1Open = matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues;
+            bool isT2Open = matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues;
+
+            if (isT1Open || isT2Open)
+            {
+                PrintToAllChat(Localizer["matchzy.custom.openteam"]);
+            }
+
             Log($"[LoadMatchFromJSON] Success with matchid: {liveMatchId}!");
             return true;
         }
@@ -540,6 +549,10 @@ namespace MatchZy
             var steamId = player.SteamID;
             try
             {
+                bool isT1Open = matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues;
+                bool isT2Open = matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues;
+
+                // Priority 1: Check explicit SteamID match
                 if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
                 {
                     if (teamSides[matchzyTeam1] == "CT")
@@ -567,13 +580,28 @@ namespace MatchZy
                 {
                     playerTeam = CsTeam.Spectator;
                 }
-                
-                // Allow non-whitelisted players to remain on their current team (Mod for roadmen/pug)
-                if (playerTeam == CsTeam.None)
+                else
                 {
-                    if (player.TeamNum == 2) playerTeam = CsTeam.Terrorist;
-                    else if (player.TeamNum == 3) playerTeam = CsTeam.CounterTerrorist;
-                    else if (player.TeamNum == 1) playerTeam = CsTeam.Spectator;
+                    // Priority 2: Handle Open/Empty Teams (PUG/Scrim Mode)
+                    // If a team has no players defined in JSON, skip SteamID check and allow current side.
+                    
+                    string currentSide = "";
+                    if (player.TeamNum == (byte)CsTeam.CounterTerrorist) currentSide = "CT";
+                    else if (player.TeamNum == (byte)CsTeam.Terrorist) currentSide = "TERRORIST";
+
+                    if (!string.IsNullOrEmpty(currentSide))
+                    {
+                        // Check if player is on T1 side and T1 is open
+                        if (isT1Open && teamSides[matchzyTeam1] == currentSide)
+                        {
+                            playerTeam = (CsTeam)player.TeamNum;
+                        }
+                        // Check if player is on T2 side and T2 is open
+                        else if (isT2Open && teamSides[matchzyTeam2] == currentSide)
+                        {
+                            playerTeam = (CsTeam)player.TeamNum;
+                        }
+                    }
                 }
             }
             catch (Exception ex)
