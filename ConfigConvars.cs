@@ -88,6 +88,7 @@ namespace MatchZy
         public void MatchZyMinimumReadyRequired(CCSPlayerController? player, CommandInfo command)
         {
             if (player != null) return;
+            // Since there is already a console command for this purpose, we will use the same.   
             OnReadyRequiredCommand(player, command);
         }
 
@@ -231,6 +232,7 @@ namespace MatchZy
                     }
                     else
                     {
+                        // ReplyToUserCommand(player, $"Invalid value for matchzy_chat_messages_timer_delay. Please specify a valid non-negative number.");
                         ReplyToUserCommand(player, Localizer["matchzy.cvars.invalidvalue"]);
                     }
                 }
@@ -274,6 +276,7 @@ namespace MatchZy
             }
             else
             {
+                // command.ReplyToCommand("Usage: matchzy_max_saved_last_grenades <number>");
                 ReplyToUserCommand(player, Localizer["matchzy.cc.usage", $"matchzy_max_saved_last_grenades <number>"]);
             }
         }
