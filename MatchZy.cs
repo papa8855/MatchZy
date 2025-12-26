@@ -259,8 +259,8 @@ namespace MatchZy
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         CsTeam targetTeam = GetPlayerTeam(player);
 
-                        // 邏輯修正：如果 GetPlayerTeam 回傳 None，代表沒有特定隊伍限制（開放模式）
-                        // 這種情況下我們應該允許玩家加入他們想加入的隊伍，而不是阻擋。
+                        // If GetPlayerTeam returns None, it means Open Mode (no teams defined)
+                        // Allow player to join any team.
                         if (targetTeam == CsTeam.None) {
                             return HookResult.Continue;
                         }
@@ -555,6 +555,8 @@ namespace MatchZy
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
 
+        // --- UNIQUE DEFINITIONS START HERE ---
+
         public HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
@@ -575,7 +577,7 @@ namespace MatchZy
 
                 if (!isWhitelisted)
                 {
-                    // Fix: Check .HasValue before accessing .Value and use correct type
+                    // Kick only if whitelist is enabled
                     if (player.UserId.HasValue)
                     {
                         Log($"[EventPlayerConnectFullHandler] Kicking player {player.PlayerName} ({steamId}) as they are not whitelisted.");
@@ -587,14 +589,12 @@ namespace MatchZy
             else
             {
                 // Logic 2: Guest Welcome (only if whitelist is NOT required)
-                // Use Localizer for the welcome message
                 PrintToPlayerChat(player, Localizer["matchzy.custom.guest_welcome"]);
             }
 
             return HookResult.Continue;
         }
-        
-        // This function was requested to be in MatchZy.cs to avoid duplicates elsewhere
+
         public void OnWLCommand(CCSPlayerController? player, CommandInfo? command)
         {
             if (player == null) return;
