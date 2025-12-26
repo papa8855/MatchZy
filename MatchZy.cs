@@ -1,13 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Modules.Commands;
-using CounterStrikeSharp.API.Modules.Events;
 using CounterStrikeSharp.API.Modules.Utils;
-using CounterStrikeSharp.API.Modules.Timers;
+using CounterStrikeSharp.API.Core.Attributes;
+using CounterStrikeSharp.API.Modules.Events;
+
 
 namespace MatchZy
 {
@@ -144,7 +141,7 @@ namespace MatchZy
                 { ".forceend", OnEndMatchCommand },
                 { ".reloadmap", OnMapReloadCommand },
                 { ".settings", OnMatchSettingsCommand },
-                { ".whitelist", OnWLCommand }, // Uses OnWLCommand from ConsoleCommands.cs
+                { ".whitelist", OnWLCommand },
                 { ".globalnades", OnSaveNadesAsGlobalCommand },
                 { ".reload_admins", OnReloadAdmins },
                 { ".tactics", OnPracCommand },
@@ -208,7 +205,7 @@ namespace MatchZy
                 { ".loadpos", OnLoadPosCommand}
             };
 
-            RegisterEventHandler<EventPlayerConnectFull>(CustomPlayerConnectFullHandler); 
+            RegisterEventHandler<EventPlayerConnectFull>(EventPlayerConnectFullHandler);
             RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnectHandler);
             RegisterEventHandler<EventCsWinPanelRound>(EventCsWinPanelRoundHandler, hookMode: HookMode.Pre);
             RegisterEventHandler<EventCsWinPanelMatch>(EventCsWinPanelMatchHandler);
@@ -257,14 +254,8 @@ namespace MatchZy
             {
                 if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
-                        CsTeam targetTeam = GetPlayerTeam(player);
-
-                        // Open Mode Logic: If team is None, allow join.
-                        if (targetTeam == CsTeam.None) {
-                            return HookResult.Continue;
-                        }
-
-                        if (joiningTeam != (int)targetTeam) {
+                        int playerTeam = (int)GetPlayerTeam(player);
+                        if (joiningTeam != playerTeam) {
                             return HookResult.Stop;
                         }
                     }
@@ -552,78 +543,6 @@ namespace MatchZy
             RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
 
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
-        }
-
-        public HookResult CustomPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
-        {
-            CCSPlayerController? player = @event.Userid;
-            if (player == null || !player.IsValid || player.IsBot) return HookResult.Continue;
-
-            // Logic 1: Whitelist Check
-            if (isWhitelistRequired)
-            {
-                var steamId = player.SteamID;
-                bool isWhitelisted = false;
-                
-                if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null) isWhitelisted = true;
-                else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null) isWhitelisted = true;
-                else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null) isWhitelisted = true;
-
-                if (!isWhitelisted)
-                {
-                    if (player.UserId.HasValue)
-                    {
-                        Log($"[CustomPlayerConnectFullHandler] Kicking player {player.PlayerName} ({steamId}) as they are not whitelisted.");
-                        Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not whitelisted!\"");
-                    }
-                    return HookResult.Continue;
-                }
-            }
-            else
-            {
-                // Logic 2: Guest Welcome
-                PrintToPlayerChat(player, Localizer["matchzy.custom.guest_welcome"]);
-            }
-
-            // Logic 3: Update/Trigger Unready Message (FIXED: Added this call back)
-            UnreadyPlayerMessage();
-
-            return HookResult.Continue;
-        }
-
-        // --- RESTORED UNREADY PLAYER MESSAGE LOGIC ---
-        public void UnreadyPlayerMessage()
-        {
-            if (isMatchLive || !readyAvailable) return;
-            string unreadyPlayers = "";
-            foreach (var key in playerReadyStatus.Keys)
-            {
-                if (!playerReadyStatus[key])
-                {
-                    var player = Utilities.GetPlayerFromUserid(key);
-                    if (IsPlayerValid(player))
-                    {
-                        unreadyPlayers += $"{player!.PlayerName}, ";
-                    }
-                }
-            }
-            if (!string.IsNullOrEmpty(unreadyPlayers))
-            {
-                unreadyPlayers = unreadyPlayers.TrimEnd(',', ' ');
-                // Uses the specific key from your json to show the message
-                Server.PrintToChatAll(Localizer["matchzy.utility.unreadyplayers", unreadyPlayers]);
-            }
-            
-            // Restart timer logic (Simplified for single file context)
-            if (unreadyPlayerMessageTimer == null)
-            {
-                unreadyPlayerMessageTimer = AddTimer(chatTimerDelay, UnreadyPlayerMessage);
-            }
-            else
-            {
-                unreadyPlayerMessageTimer.Kill();
-                unreadyPlayerMessageTimer = AddTimer(chatTimerDelay, UnreadyPlayerMessage);
-            }
         }
     }
 }
