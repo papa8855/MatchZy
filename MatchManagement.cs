@@ -379,6 +379,16 @@ namespace MatchZy
             Task.Run(async () => {
                 await SendEventAsync(seriesStartedEvent);
             });
+            
+            // --- ADDED MISSING NOTIFICATION LOGIC FOR OPEN TEAMS ---
+            bool isTeam1Empty = matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues;
+            bool isTeam2Empty = matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues;
+            
+            if (isTeam1Empty && isTeam2Empty) {
+                // This triggers "matchzy.custom.openteam" from the JSON
+                Server.PrintToChatAll(Localizer["matchzy.custom.openteam"]);
+            }
+            // --------------------------------------------------------
 
             Log($"[LoadMatchFromJSON] Success with matchid: {liveMatchId}!");
             return true;
