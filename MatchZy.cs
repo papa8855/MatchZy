@@ -89,11 +89,13 @@ namespace MatchZy
             LoadAdmins();
 
             database.InitializeDatabase(ModuleDirectory);
-isWhitelistRequired = false;
-AddCommandListener("kickid", (player, info) => {
-    if (info.ArgString.Contains("not part of this match")) return HookResult.Handled;
-    return HookResult.Continue;
-});
+            
+            isWhitelistRequired = false;
+            AddCommandListener("kickid", (player, info) => {
+                if (info.ArgString.Contains("not part of this match")) return HookResult.Handled;
+                return HookResult.Continue;
+            });
+
             // This sets default config ConVars
             Server.ExecuteCommand("execifexists MatchZy/config.cfg");
 
