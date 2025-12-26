@@ -1,10 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Commands;
-using CounterStrikeSharp.API.Modules.Utils;
 using CounterStrikeSharp.API.Core.Attributes;
+using CounterStrikeSharp.API.Modules.Commands; // 確保在上方
 using CounterStrikeSharp.API.Modules.Events;
-
+using CounterStrikeSharp.API.Modules.Utils;
+using CounterStrikeSharp.API.Modules.Timers;
 
 namespace MatchZy
 {
@@ -550,39 +553,33 @@ namespace MatchZy
             CCSPlayerController? player = @event.Userid;
             if (player == null || !player.IsValid || player.IsBot) return HookResult.Continue;
 
-            // Handle whitelist kicking
+            // Logic 1: Whitelist Check
             if (isWhitelistRequired)
             {
                 var steamId = player.SteamID;
                 bool isWhitelisted = false;
-                if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
-                {
-                    isWhitelisted = true;
-                }
-                else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null)
-                {
-                    isWhitelisted = true;
-                }
-                else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
-                {
-                    isWhitelisted = true;
-                }
+                
+                // Check Team 1
+                if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null) isWhitelisted = true;
+                // Check Team 2
+                else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null) isWhitelisted = true;
+                // Check Spectators
+                else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null) isWhitelisted = true;
 
                 if (!isWhitelisted)
                 {
-                     if (player.UserId.HasValue) 
-                     {
+                    if (player.UserId.HasValue)
+                    {
                         Log($"[EventPlayerConnectFullHandler] Kicking player {player.PlayerName} ({steamId}) as they are not whitelisted.");
                         Server.ExecuteCommand($"kickid {player.UserId.Value} \"You are not whitelisted!\"");
-                     }
-                     return HookResult.Continue;
+                    }
+                    return HookResult.Continue;
                 }
             }
-            else 
+            else
             {
-                // If whitelist is disabled, or they passed the whitelist, allow join.
-                // If it's an "Open" game (checked in GetPlayerTeam logic effectively), send welcome.
-                // We just assume if not kicking, and not strictly bound, they are a guest/player.
+                // Logic 2: Guest Welcome (only if whitelist is NOT required)
+                // Use Localizer for the welcome message
                 PrintToPlayerChat(player, Localizer["matchzy.custom.guest_welcome"]);
             }
 
