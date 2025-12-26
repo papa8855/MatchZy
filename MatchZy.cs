@@ -555,7 +555,7 @@ namespace MatchZy
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
 
-        // --- RENAMED DEFINITIONS TO AVOID CONFLICTS ---
+        // --- NEW & RENAMED FUNCTIONS TO FIX DUPLICATES & MISSING LOGIC ---
 
         public HookResult CustomPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
@@ -568,11 +568,8 @@ namespace MatchZy
                 var steamId = player.SteamID;
                 bool isWhitelisted = false;
                 
-                // Check Team 1
                 if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null) isWhitelisted = true;
-                // Check Team 2
                 else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null) isWhitelisted = true;
-                // Check Spectators
                 else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null) isWhitelisted = true;
 
                 if (!isWhitelisted)
@@ -587,9 +584,12 @@ namespace MatchZy
             }
             else
             {
-                // Logic 2: Guest Welcome (only if whitelist is NOT required)
+                // Logic 2: Guest Welcome
                 PrintToPlayerChat(player, Localizer["matchzy.custom.guest_welcome"]);
             }
+
+            // Logic 3: Update/Trigger Unready Message (FIXED: Added this call back)
+            UnreadyPlayerMessage();
 
             return HookResult.Continue;
         }
@@ -603,6 +603,41 @@ namespace MatchZy
             }
             isWhitelistRequired = !isWhitelistRequired;
             PrintToPlayerChat(player, Localizer["matchzy.cc.wl", isWhitelistRequired ? "Enabled" : "Disabled"]);
+        }
+
+        // --- RESTORED UNREADY PLAYER MESSAGE LOGIC ---
+        public void UnreadyPlayerMessage()
+        {
+            if (isMatchLive || !readyAvailable) return;
+            string unreadyPlayers = "";
+            foreach (var key in playerReadyStatus.Keys)
+            {
+                if (!playerReadyStatus[key])
+                {
+                    var player = Utilities.GetPlayerFromUserid(key);
+                    if (IsPlayerValid(player))
+                    {
+                        unreadyPlayers += $"{player!.PlayerName}, ";
+                    }
+                }
+            }
+            if (!string.IsNullOrEmpty(unreadyPlayers))
+            {
+                unreadyPlayers = unreadyPlayers.TrimEnd(',', ' ');
+                // Uses the specific key from your json to show the message
+                Server.PrintToChatAll(Localizer["matchzy.utility.unreadyplayers", unreadyPlayers]);
+            }
+            
+            // Restart timer logic (Simplified for single file context)
+            if (unreadyPlayerMessageTimer == null)
+            {
+                unreadyPlayerMessageTimer = AddTimer(chatTimerDelay, UnreadyPlayerMessage);
+            }
+            else
+            {
+                unreadyPlayerMessageTimer.Kill();
+                unreadyPlayerMessageTimer = AddTimer(chatTimerDelay, UnreadyPlayerMessage);
+            }
         }
     }
 }
