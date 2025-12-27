@@ -582,7 +582,6 @@ namespace MatchZy
         }
         return playerTeam;
     }
-}
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
         {
             long matchId = liveMatchId;
