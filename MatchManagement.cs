@@ -536,11 +536,19 @@ namespace MatchZy
 
   private CsTeam GetPlayerTeam(CCSPlayerController player)
     {
-        // 你的這行改得很棒！
+        // 1. 如果雙方隊伍都沒設定名單，直接回傳玩家現在所在的隊伍
+        if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
+            (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
+        {
+            return (CsTeam)player.TeamNum;
+        }
+
+        // 2. 你的核心改動：如果不需要白名單，就認可玩家選的隊伍，不讓他變成 None
         CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
         var steamId = player.SteamID;
         try
         {
+            // 3. 開始檢查名單（只有當 isWhitelistRequired 為 true 時這段才有實質過濾意義）
             if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
             {
                 if (teamSides[matchzyTeam1] == "CT")
