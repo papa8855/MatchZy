@@ -544,5 +544,28 @@ namespace MatchZy
 
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
+
+        public HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+        {
+            CCSPlayerController? player = @event.Userid;
+
+            if (player == null || !player.IsValid) return HookResult.Continue;
+            if (player.IsBot || player.IsHLTV) return HookResult.Continue;
+
+            if (isMatchSetup || matchModeOnly)
+            {
+                CsTeam team = GetPlayerTeam(player);
+                if (team == CsTeam.None && player.UserId.HasValue)
+                {
+                    if (isWhitelistRequired)
+                    {
+                        Server.ExecuteCommand($"kickid {(ushort)player.UserId}");
+                    }
+                    // If whitelist is NOT required, we simply continue, allowing the player to stay.
+                }
+            }
+
+            return HookResult.Continue;
+        }
     }
 }
