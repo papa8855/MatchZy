@@ -83,7 +83,7 @@ namespace MatchZy
 
         // SQLite/MySQL Database 
         private Database database = new();
-    
+        public bool isWhitelistRequired = false;
         public override void Load(bool hotReload) {
             
             LoadAdmins();
@@ -250,24 +250,21 @@ namespace MatchZy
                 return HookResult.Continue;
             });
 
-            AddCommandListener("jointeam", (player, info) =>
-            {
-                if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
-                    if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
-                        int playerTeam = (int)GetPlayerTeam(player);
-                        
-                        // FIX: 如果是路人 (None) 且未開啟白名單 (!isWhitelistRequired)，允許加入隊伍
-                        if (playerTeam == (int)CsTeam.None && !isWhitelistRequired) {
-                            return HookResult.Continue;
-                        }
-
-                        if (joiningTeam != playerTeam) {
-                            return HookResult.Stop;
-                        }
+AddCommandListener("jointeam", (player, info) =>
+        {
+            if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
+                if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
+                    int playerTeam = (int)GetPlayerTeam(player);
+                    if (playerTeam == (int)CsTeam.None && !isWhitelistRequired) {
+                        return HookResult.Continue;
+                    }
+                    if (joiningTeam != playerTeam) {
+                        return HookResult.Stop;
                     }
                 }
-                return HookResult.Continue;
-            });
+            }
+            return HookResult.Continue;
+        });
 
             AddCommandListener("noclip", OnConsoleNoClip); // Override noclip
 
@@ -549,6 +546,6 @@ namespace MatchZy
             RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
 
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
-} 
-    } 
-} 
+        }
+    }
+}
