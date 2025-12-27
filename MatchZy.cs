@@ -83,7 +83,6 @@ namespace MatchZy
 
         // SQLite/MySQL Database 
         private Database database = new();
-        public bool isWhitelistRequired = false;
         public override void Load(bool hotReload) {
             
             LoadAdmins();
