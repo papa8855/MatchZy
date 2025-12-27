@@ -550,8 +550,7 @@ namespace MatchZy
 
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
-
-        private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+		private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
 
@@ -568,7 +567,7 @@ namespace MatchZy
 
                 if (playerTeam == CsTeam.None)
                 {
-                    // FIX: 只有在開啟白名單 (isWhitelistRequired) 時，才踢出非名單內的玩家
+                    // 【修改重點】：只有在開啟白名單 (isWhitelistRequired) 時，才踢出非名單內的玩家
                     if (isWhitelistRequired)
                     {
                         Log($"[EventPlayerConnectFullHandler] Kicking player {player.PlayerName} ({player.SteamID}) as they are not on the team list.");
@@ -578,6 +577,4 @@ namespace MatchZy
                 }
             }
             return HookResult.Continue;
-        } 
-    } 
-}
+        }
