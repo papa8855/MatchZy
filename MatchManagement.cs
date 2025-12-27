@@ -536,18 +536,50 @@ namespace MatchZy
 
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
-            var steamId = player.SteamID;
+            // If both teams have no players in the config, skip the check (allow normal selection)
+            if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
+                (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
+            {
+                return CsTeam.None;
+            }
 
-            if (matchConfig.MatchSideConfig != null && matchConfig.MatchSideConfig.Players != null && matchConfig.MatchSideConfig.Players.Count > 0) {
-                if (matchConfig.MatchSideConfig.Players.ContainsKey(steamId)) {
-                    string teamAbbreviation = matchConfig.MatchSideConfig.Players[steamId];
-                    if (teamAbbreviation.Equals("CT", StringComparison.OrdinalIgnoreCase)) return CsTeam.CounterTerrorist;
-                    if (teamAbbreviation.Equals("T", StringComparison.OrdinalIgnoreCase)) return CsTeam.Terrorist;
-                } else {
-                    return CsTeam.None;
+            CsTeam playerTeam = CsTeam.None;
+            var steamId = player.SteamID;
+            try
+            {
+                if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
+                {
+                    if (teamSides[matchzyTeam1] == "CT")
+                    {
+                        playerTeam = CsTeam.CounterTerrorist;
+                    }
+                    else if (teamSides[matchzyTeam1] == "TERRORIST")
+                    {
+                        playerTeam = CsTeam.Terrorist;
+                    }
+
+                }
+                else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null)
+                {
+                    if (teamSides[matchzyTeam2] == "CT")
+                    {
+                        playerTeam = CsTeam.CounterTerrorist;
+                    }
+                    else if (teamSides[matchzyTeam2] == "TERRORIST")
+                    {
+                        playerTeam = CsTeam.Terrorist;
+                    }
+                }
+                else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
+                {
+                    playerTeam = CsTeam.Spectator;
                 }
             }
-            return CsTeam.None;
+            catch (Exception ex)
+            {
+                Log($"[GetPlayerTeam - FATAL] Exception occurred: {ex.Message}");
+            }
+            return playerTeam;
         }
 
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
