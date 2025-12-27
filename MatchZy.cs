@@ -549,6 +549,6 @@ namespace MatchZy
             RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
 
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
-} // 這是關閉 Load 函數
-    } // 這是關閉 class MatchZy
-} // 這是關閉 namespace MatchZy
+} 
+    } 
+} 
