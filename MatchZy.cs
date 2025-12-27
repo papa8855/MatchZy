@@ -217,8 +217,7 @@ namespace MatchZy
                // May not be required, but just to be on safe side so that player data is properly updated in dictionaries
                // Update: Commenting the below function as it was being called multiple times on map change.
                 // UpdatePlayersMap();
-            });
-            RegisterListener<Listeners.OnEntitySpawned>(OnEntitySpawnedHandler);
+            });RegisterListener<Listeners.OnEntitySpawned>(OnEntitySpawnedHandler);
             RegisterEventHandler<EventPlayerTeam>((@event, info) => {
                 CCSPlayerController? player = @event.Userid;
                 if (!IsPlayerValid(player)) return HookResult.Continue;
@@ -256,7 +255,7 @@ namespace MatchZy
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         int playerTeam = (int)GetPlayerTeam(player);
                         
-                        // FIX: Allow joining if player is unassigned AND whitelist is not required (or lists empty)
+                        // 【修改重點】：如果是路人 (None) 且未開啟白名單 (!isWhitelistRequired)，允許加入隊伍
                         if (playerTeam == (int)CsTeam.None && !isWhitelistRequired) {
                             return HookResult.Continue;
                         }
@@ -569,7 +568,7 @@ namespace MatchZy
 
                 if (playerTeam == CsTeam.None)
                 {
-                    // FIX: Only kick if whitelist is actually required
+                    // 【修改重點】：只有在開啟白名單 (isWhitelistRequired) 時，才踢出非名單內的玩家
                     if (isWhitelistRequired)
                     {
                         Log($"[EventPlayerConnectFullHandler] Kicking player {player.PlayerName} ({player.SteamID}) as they are not on the team list.");
