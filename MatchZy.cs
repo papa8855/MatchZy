@@ -250,24 +250,23 @@ namespace MatchZy
             });
 
 AddCommandListener("jointeam", (player, info) =>
-{
-    [cite_start]// 修改判斷條件：如果沒開啟白名單，就允許路人進入隊伍 [cite: 365, 331]
-    if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
-        if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
-            int playerTeam = (int)GetPlayerTeam(player);
-            
-            [cite_start]// 這是關鍵修正：只要 isWhitelistRequired 是 false，就不執行後續的 Stop [cite: 331, 366]
-            if (playerTeam == (int)CsTeam.None && !isWhitelistRequired) {
-                return HookResult.Continue;
-            }
+            {
+                if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
+                    if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
+                        int playerTeam = (int)GetPlayerTeam(player);
+                        
+                        // 只要沒開啟白名單，就放行路人選隊
+                        if (playerTeam == (int)CsTeam.None && !isWhitelistRequired) {
+                            return HookResult.Continue;
+                        }
 
-            if (joiningTeam != playerTeam) {
-                return HookResult.Stop;
-            }
-        }
-    }
-    return HookResult.Continue;
-});
+                        if (joiningTeam != playerTeam) {
+                            return HookResult.Stop;
+                        }
+                    }
+                }
+                return HookResult.Continue;
+            });
 
             AddCommandListener("noclip", OnConsoleNoClip); // Override noclip
 
