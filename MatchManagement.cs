@@ -536,11 +536,11 @@ namespace MatchZy
 
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
-            // If both teams have no players in the config, skip the check (allow normal selection)
-            if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
+            // FIX: If both teams have no players defined (empty list), allow players to choose/stay on their team.
+            if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
                 (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
             {
-                return CsTeam.None;
+                return (CsTeam)player.TeamNum;
             }
 
             CsTeam playerTeam = CsTeam.None;
