@@ -255,6 +255,12 @@ namespace MatchZy
                 if ((isMatchSetup || isVeto) && player != null && player.IsValid) {
                     if (int.TryParse(info.ArgByIndex(1), out int joiningTeam)) {
                         int playerTeam = (int)GetPlayerTeam(player);
+                        
+                        // FIX: Allow joining if player is unassigned AND whitelist is not required (or lists empty)
+                        if (playerTeam == (int)CsTeam.None && !isWhitelistRequired) {
+                            return HookResult.Continue;
+                        }
+
                         if (joiningTeam != playerTeam) {
                             return HookResult.Stop;
                         }
@@ -545,26 +551,33 @@ namespace MatchZy
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
         }
 
-        public HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+        // Added missing EventPlayerConnectFullHandler with whitelist check fix
+        private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
 
-            if (player == null || !player.IsValid) return HookResult.Continue;
-            if (player.IsBot || player.IsHLTV) return HookResult.Continue;
+            if (!IsPlayerValid(player)) return HookResult.Continue;
 
-            if (isMatchSetup || matchModeOnly)
+            if (player!.IsHLTV || player.IsBot)
             {
-                CsTeam team = GetPlayerTeam(player);
-                if (team == CsTeam.None && player.UserId.HasValue)
-                {
-                    if (isWhitelistRequired)
-                    {
-                        Server.ExecuteCommand($"kickid {(ushort)player.UserId}");
-                    }
-                    // If whitelist is NOT required, we simply continue, allowing the player to stay.
-                }
+                return HookResult.Continue;
             }
 
+            if (isMatchSetup)
+            {
+                CsTeam playerTeam = GetPlayerTeam(player);
+
+                if (playerTeam == CsTeam.None)
+                {
+                    // FIX: Only kick if whitelist is actually required
+                    if (isWhitelistRequired)
+                    {
+                        Log($"[EventPlayerConnectFullHandler] Kicking player {player.PlayerName} ({player.SteamID}) as they are not on the team list.");
+                        Server.ExecuteCommand($"kickid {player.UserId}");
+                        return HookResult.Continue;
+                    }
+                }
+            }
             return HookResult.Continue;
         }
     }
