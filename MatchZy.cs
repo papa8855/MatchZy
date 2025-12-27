@@ -217,7 +217,8 @@ namespace MatchZy
                // May not be required, but just to be on safe side so that player data is properly updated in dictionaries
                // Update: Commenting the below function as it was being called multiple times on map change.
                 // UpdatePlayersMap();
-            });RegisterListener<Listeners.OnEntitySpawned>(OnEntitySpawnedHandler);
+            });
+            RegisterListener<Listeners.OnEntitySpawned>(OnEntitySpawnedHandler);
             RegisterEventHandler<EventPlayerTeam>((@event, info) => {
                 CCSPlayerController? player = @event.Userid;
                 if (!IsPlayerValid(player)) return HookResult.Continue;
@@ -548,10 +549,7 @@ namespace MatchZy
             RegisterEventHandler<EventDecoyStarted>(EventDecoyDetonateHandler);
 
             Console.WriteLine($"[{ModuleName} {ModuleVersion} LOADED] MatchZy by WD- (https://github.com/shobhit-pathak/)");
-        }
-
-        // Added missing EventPlayerConnectFullHandler with whitelist check fix
-        private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
+        }private HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
 
@@ -579,5 +577,3 @@ namespace MatchZy
             }
             return HookResult.Continue;
         }
-    }
-}
