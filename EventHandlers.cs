@@ -20,13 +20,13 @@ public partial class MatchZy
             {
                 var steamId = player.SteamID;
 
-                bool kicked = HandlePlayerWhitelist(player, steamId.ToString());
+                bool kicked = isWhitelistRequired && HandlePlayerWhitelist(player, steamId.ToString());
                 if (kicked) return HookResult.Continue;
 
                 if (isMatchSetup || matchModeOnly)
                 {
                     CsTeam team = GetPlayerTeam(player);
-                    if (team == CsTeam.None)
+                    if (team == CsTeam.None && isWhitelistRequired)
                     {
                         Log($"[EventPlayerConnectFull] KICKING PLAYER STEAMID: {steamId}, Name: {player.PlayerName} (NOT ALLOWED!)");
                         PrintToAllChat($"Kicking player {player.PlayerName} - Not a player in this game.");
