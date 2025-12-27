@@ -538,9 +538,9 @@ namespace MatchZy
         {
             var steamId = player.SteamID;
 
-            if (matchConfig.Players != null && matchConfig.Players.Count > 0) {
-                if (matchConfig.Players.ContainsKey(steamId)) {
-                    string teamAbbreviation = matchConfig.Players[steamId];
+            if (matchConfig.MatchSideConfig != null && matchConfig.MatchSideConfig.Players != null && matchConfig.MatchSideConfig.Players.Count > 0) {
+                if (matchConfig.MatchSideConfig.Players.ContainsKey(steamId)) {
+                    string teamAbbreviation = matchConfig.MatchSideConfig.Players[steamId];
                     if (teamAbbreviation.Equals("CT", StringComparison.OrdinalIgnoreCase)) return CsTeam.CounterTerrorist;
                     if (teamAbbreviation.Equals("T", StringComparison.OrdinalIgnoreCase)) return CsTeam.Terrorist;
                 } else {
