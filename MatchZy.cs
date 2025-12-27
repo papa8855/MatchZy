@@ -576,4 +576,6 @@ namespace MatchZy
                 }
             }
             return HookResult.Continue;
-        }
+        } 
+    } 
+} 
