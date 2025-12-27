@@ -536,13 +536,6 @@ namespace MatchZy
 
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
-            // FIX: If both teams have no players defined (empty list), allow players to choose/stay on their team.
-            if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
-                (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
-            {
-                return (CsTeam)player.TeamNum;
-            }
-
             CsTeam playerTeam = CsTeam.None;
             var steamId = player.SteamID;
             try
