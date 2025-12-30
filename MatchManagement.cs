@@ -534,14 +534,29 @@ namespace MatchZy
             (reverseTeamSides["CT"], reverseTeamSides["TERRORIST"]) = (reverseTeamSides["TERRORIST"], reverseTeamSides["CT"]);
         }
 
-  private CsTeam GetPlayerTeam(CCSPlayerController player)
+private CsTeam GetPlayerTeam(CCSPlayerController player)
+{
+    // --- 新增：如果 JSON 裡兩個隊伍都沒有名單資料，直接信任玩家當前的遊戲陣營 ---
+    if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
+        (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
     {
-        // 1. 如果雙方隊伍都沒設定名單，直接回傳玩家現在所在的隊伍
-        if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
-            (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
-        {
-            return (CsTeam)player.TeamNum;
-        }
+        // 直接返回該玩家目前在伺服器內的隊伍 (CT 或 T)
+        return (CsTeam)player.TeamNum; 
+    }
+    // ----------------------------------------------------------------
+
+    // 以下是原有的名單比對邏輯
+    CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
+    if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[player.SteamID.ToString()] != null)
+    {
+        playerTeam = CsTeam.CounterTerrorist;
+    }
+    else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[player.SteamID.ToString()] != null)
+    {
+        playerTeam = CsTeam.Terrorist;
+    }
+    return playerTeam;
+}
 
         // 2. 你的核心改動：如果不需要白名單，就認可玩家選的隊伍，不讓他變成 None
         CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
