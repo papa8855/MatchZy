@@ -620,7 +620,7 @@ namespace MatchZy
             });
         }
 
-        public void HandlePlayoutConfig()
+public void HandlePlayoutConfig()
         {
             if (isPlayOutEnabled) {
                 Server.ExecuteCommand("mp_overtime_enable 0");
@@ -632,7 +632,8 @@ namespace MatchZy
                 Server.ExecuteCommand($"mp_match_can_clinch {matchCanClinch ?? "1"}");
                 Server.ExecuteCommand($"mp_overtime_enable {overtimeEnabled ?? "1"}");
             }
-        }
+        } 
 
-    }
+    } 
 
+} 
