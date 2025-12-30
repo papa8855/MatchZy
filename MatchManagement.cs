@@ -536,21 +536,23 @@ namespace MatchZy
 
 private CsTeam GetPlayerTeam(CCSPlayerController player)
 {
-    // --- 新增：如果 JSON 裡兩個隊伍都沒有名單資料，直接信任玩家當前的遊戲陣營 ---
+    // 修正點：邏輯必須在方法括號內。如果 JSON 裡兩個隊伍都沒有名單資料，直接信任玩家當前的遊戲陣營
     if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
         (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
     {
-        // 直接返回該玩家目前在伺服器內的隊伍 (CT 或 T)
+        // 強制回傳玩家目前在伺服器內的隊伍 (CT=3, T=2)
         return (CsTeam)player.TeamNum; 
     }
-    // ----------------------------------------------------------------
 
-    // 以下是原有的名單比對邏輯
+    // 以下為原有的名單檢查邏輯
     CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
+    
+    // 檢查 Team1 名單
     if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[player.SteamID.ToString()] != null)
     {
         playerTeam = CsTeam.CounterTerrorist;
     }
+    // 檢查 Team2 名單
     else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[player.SteamID.ToString()] != null)
     {
         playerTeam = CsTeam.Terrorist;
