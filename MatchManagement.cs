@@ -524,47 +524,100 @@ namespace MatchZy
             Server.ExecuteCommand($"mp_teamname_{teamNum} {teamName};");
         }
 
-       public void SwapSidesInTeamData(bool swapTeams) {
+        public void SwapSidesInTeamData(bool swapTeams) {
+            // if (swapTeams) {
+            //     // Here, we sync matchzyTeam1 and matchzyTeam2 with the actual team1 and team2
+            //     (matchzyTeam2, matchzyTeam1) = (matchzyTeam1, matchzyTeam2);
+            // }
+
             (teamSides[matchzyTeam1], teamSides[matchzyTeam2]) = (teamSides[matchzyTeam2], teamSides[matchzyTeam1]);
             (reverseTeamSides["CT"], reverseTeamSides["TERRORIST"]) = (reverseTeamSides["TERRORIST"], reverseTeamSides["CT"]);
-        } // <--- 檢查這個括號有沒有！
+        }
 
-private CsTeam GetPlayerTeam(CCSPlayerController player)
+  private CsTeam GetPlayerTeam(CCSPlayerController player)
+    {
+        // 1. 如果雙方隊伍都沒設定名單，直接回傳玩家現在所在的隊伍
+        if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
+            (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
         {
-            // 1. 如果 JSON 沒名單，直接信任玩家隊伍 (這就是解決 BO3 1:1 不換圖的關鍵)
-            if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
-                (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
-            {
-                return (CsTeam)player.TeamNum;
-            }
+            return (CsTeam)player.TeamNum;
+        }
 
-            CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
-            var steamId = player.SteamID.ToString();
-
-            try
-            {
-                if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
-                {
-                    playerTeam = (teamSides.ContainsKey(matchzyTeam1) && teamSides[matchzyTeam1] == "CT") ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
-                }
-                else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId] != null)
-                {
-                    playerTeam = (teamSides.ContainsKey(matchzyTeam2) && teamSides[matchzyTeam2] == "CT") ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"[GetPlayerTeam Error] {ex.Message}");
-            }
-
-            return playerTeam;
-        } // 這裡要有一個括號關閉方法
-
-        public void EndSeries(string? winnerName, int winnerTeam)
+        // 2. 你的核心改動：如果不需要白名單，就認可玩家選的隊伍，不讓他變成 None
+        CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
+        var steamId = player.SteamID;
+        try
         {
-            // 這裡我幫你保留了原本 EndSeries 的所有邏輯...
-            // (內容太長，請確保這之後接的是你原本的 EndSeries 代碼)
-            // ...
+            // 3. 開始檢查名單（只有當 isWhitelistRequired 為 true 時這段才有實質過濾意義）
+            if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
+            {
+                if (teamSides[matchzyTeam1] == "CT")
+                {
+                    playerTeam = CsTeam.CounterTerrorist;
+                }
+                else if (teamSides[matchzyTeam1] == "TERRORIST")
+                {
+                    playerTeam = CsTeam.Terrorist;
+                }
+            }
+            else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null)
+            {
+                if (teamSides[matchzyTeam2] == "CT")
+                {
+                    playerTeam = CsTeam.CounterTerrorist;
+                }
+                else if (teamSides[matchzyTeam2] == "TERRORIST")
+                {
+                    playerTeam = CsTeam.Terrorist;
+                }
+            }
+            else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
+            {
+                playerTeam = CsTeam.Spectator;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[GetPlayerTeam - FATAL] Exception occurred: {ex.Message}");
+        }
+        return playerTeam;
+    }
+        public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
+        {
+            long matchId = liveMatchId;
+            (int team1Score, int team2Score) = (matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
+            if (winnerName == null)
+            {
+                PrintToAllChat($"{ChatColors.Green}{matchzyTeam1.teamName}{ChatColors.Default} and {ChatColors.Green}{matchzyTeam2.teamName}{ChatColors.Default} have tied the match");
+            }
+            else
+            {
+                Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} has won the match");
+            }
+
+            string winnerTeam = (winnerName == null) ? "none" : matchzyTeam1.seriesScore > matchzyTeam2.seriesScore ? "team1" : "team2";
+
+            var seriesResultEvent = new MatchZySeriesResultEvent()
+            {
+                MatchId = matchId,
+                Winner = new Winner(t1score > t2score && reverseTeamSides["CT"] == matchzyTeam1 ? "3" : "2", winnerTeam),
+                Team1SeriesScore = team1Score,
+                Team2SeriesScore = team2Score,
+                TimeUntilRestore = 10,
+            };
+
+            Task.Run(async () => {
+                await database.SetMatchEndData(matchId, winnerName ?? "Draw", team1Score, team2Score);
+                // Making sure that map end event is fired first
+                await Task.Delay(2000);
+                await SendEventAsync(seriesResultEvent);
+            });
+
+            if (resetCvarsOnSeriesEnd) ResetChangedConvars();
+            isMatchLive = false;
+            AddTimer(restartDelay, () => {
+                ResetMatch(false);
+            });
         }
 
         public void HandlePlayoutConfig()
@@ -579,7 +632,7 @@ private CsTeam GetPlayerTeam(CCSPlayerController player)
                 Server.ExecuteCommand($"mp_match_can_clinch {matchCanClinch ?? "1"}");
                 Server.ExecuteCommand($"mp_overtime_enable {overtimeEnabled ?? "1"}");
             }
-        } // 關閉 HandlePlayoutConfig
+        }
 
-    } // 關閉 partial class MatchZy
-} // 關閉 namespace MatchZy
+    }
+}
