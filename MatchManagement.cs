@@ -633,7 +633,6 @@ public void HandlePlayoutConfig()
                 Server.ExecuteCommand($"mp_overtime_enable {overtimeEnabled ?? "1"}");
             }
         } 
+   } 
 
 
-
-} 
