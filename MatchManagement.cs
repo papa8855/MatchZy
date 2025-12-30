@@ -536,30 +536,26 @@ namespace MatchZy
 
 private CsTeam GetPlayerTeam(CCSPlayerController player)
 {
-    // 修正點：邏輯必須在方法括號內。如果 JSON 裡兩個隊伍都沒有名單資料，直接信任玩家當前的遊戲陣營
+    // 1. 如果雙方隊伍都沒設定名單，直接回傳玩家現在所在的隊伍
     if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
         (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
     {
-        // 強制回傳玩家目前在伺服器內的隊伍 (CT=3, T=2)
-        return (CsTeam)player.TeamNum; 
+        return (CsTeam)player.TeamNum;
     }
 
-    // 以下為原有的名單檢查邏輯
+    // 2. 如果有名單，執行原本的判定邏輯
     CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
-    
-    // 檢查 Team1 名單
+
     if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[player.SteamID.ToString()] != null)
     {
         playerTeam = CsTeam.CounterTerrorist;
     }
-    // 檢查 Team2 名單
     else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[player.SteamID.ToString()] != null)
     {
         playerTeam = CsTeam.Terrorist;
     }
     return playerTeam;
 }
-
         // 2. 你的核心改動：如果不需要白名單，就認可玩家選的隊伍，不讓他變成 None
         CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
         var steamId = player.SteamID;
