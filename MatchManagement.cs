@@ -536,74 +536,40 @@ namespace MatchZy
 
 private CsTeam GetPlayerTeam(CCSPlayerController player)
 {
-    // 【修正核心】如果 JSON 沒名單，直接信任遊戲內的隊伍 (解決 1:1 不換圖問題)
+    // 優先權 1：檢查是否為完全無名單模式
     if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
         (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
     {
+        // 這種情況下，直接回傳該玩家當前的隊伍，確保 BO3 分數能正確計算
         return (CsTeam)player.TeamNum;
     }
 
-    // 原有名單判定邏輯
+    // 優先權 2：如果有名單，則啟動嚴格比對
+    // 這裡保留你提到的核心改動：如果不強制白名單，預設先給他當前隊伍，再由下面名單做細節修正
     CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
-    string steamId = player.SteamID.ToString();
+    var steamId = player.SteamID.ToString();
 
     try
     {
         if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
         {
+            // 根據 Team1 目前在哪一邊（CT/T）來賦予正確的 CsTeam
             playerTeam = (teamSides.ContainsKey(matchzyTeam1) && teamSides[matchzyTeam1] == "CT") ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
         }
         else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId] != null)
         {
+            // 根據 Team2 目前在哪一邊（CT/T）來賦予正確的 CsTeam
             playerTeam = (teamSides.ContainsKey(matchzyTeam2) && teamSides[matchzyTeam2] == "CT") ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
         }
     }
-    catch (Exception e)
+    catch (Exception ex)
     {
-        Log($"[GetPlayerTeam Error] {e.Message}");
+        Log($"[GetPlayerTeam Error] {ex.Message}");
     }
 
     return playerTeam;
 }
-        // 2. 你的核心改動：如果不需要白名單，就認可玩家選的隊伍，不讓他變成 None
-        CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
-        var steamId = player.SteamID;
-        try
-        {
-            // 3. 開始檢查名單（只有當 isWhitelistRequired 為 true 時這段才有實質過濾意義）
-            if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
-            {
-                if (teamSides[matchzyTeam1] == "CT")
-                {
-                    playerTeam = CsTeam.CounterTerrorist;
-                }
-                else if (teamSides[matchzyTeam1] == "TERRORIST")
-                {
-                    playerTeam = CsTeam.Terrorist;
-                }
-            }
-            else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null)
-            {
-                if (teamSides[matchzyTeam2] == "CT")
-                {
-                    playerTeam = CsTeam.CounterTerrorist;
-                }
-                else if (teamSides[matchzyTeam2] == "TERRORIST")
-                {
-                    playerTeam = CsTeam.Terrorist;
-                }
-            }
-            else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
-            {
-                playerTeam = CsTeam.Spectator;
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"[GetPlayerTeam - FATAL] Exception occurred: {ex.Message}");
-        }
-        return playerTeam;
-    }
+
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
         {
             long matchId = liveMatchId;
