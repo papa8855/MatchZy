@@ -536,24 +536,33 @@ namespace MatchZy
 
 private CsTeam GetPlayerTeam(CCSPlayerController player)
 {
-    // 1. 如果雙方隊伍都沒設定名單，直接回傳玩家現在所在的隊伍
+    // 【修正核心】如果 JSON 沒名單，直接信任遊戲內的隊伍 (解決 1:1 不換圖問題)
     if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
         (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
     {
         return (CsTeam)player.TeamNum;
     }
 
-    // 2. 如果有名單，執行原本的判定邏輯
+    // 原有名單判定邏輯
     CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
+    string steamId = player.SteamID.ToString();
 
-    if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[player.SteamID.ToString()] != null)
+    try
     {
-        playerTeam = CsTeam.CounterTerrorist;
+        if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
+        {
+            playerTeam = (teamSides.ContainsKey(matchzyTeam1) && teamSides[matchzyTeam1] == "CT") ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
+        }
+        else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId] != null)
+        {
+            playerTeam = (teamSides.ContainsKey(matchzyTeam2) && teamSides[matchzyTeam2] == "CT") ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
+        }
     }
-    else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[player.SteamID.ToString()] != null)
+    catch (Exception e)
     {
-        playerTeam = CsTeam.Terrorist;
+        Log($"[GetPlayerTeam Error] {e.Message}");
     }
+
     return playerTeam;
 }
         // 2. 你的核心改動：如果不需要白名單，就認可玩家選的隊伍，不讓他變成 None
