@@ -22,7 +22,7 @@ namespace MatchZy
         [JsonPropertyName("teamtag")]
         public string teamTag = "";
 
-        [JsonPropertyName("teamplayers")]
+        [JsonPropertyName("players")]
         public JToken? teamPlayers;
 
         [JsonIgnore, Newtonsoft.Json.JsonIgnore]
