@@ -524,64 +524,42 @@ namespace MatchZy
             Server.ExecuteCommand($"mp_teamname_{teamNum} {teamName};");
         }
 
-        public void SwapSidesInTeamData(bool swapTeams) {
-            // if (swapTeams) {
-            //     // Here, we sync matchzyTeam1 and matchzyTeam2 with the actual team1 and team2
-            //     (matchzyTeam2, matchzyTeam1) = (matchzyTeam1, matchzyTeam2);
-            // }
-
+       public void SwapSidesInTeamData(bool swapTeams) {
             (teamSides[matchzyTeam1], teamSides[matchzyTeam2]) = (teamSides[matchzyTeam2], teamSides[matchzyTeam1]);
             (reverseTeamSides["CT"], reverseTeamSides["TERRORIST"]) = (reverseTeamSides["TERRORIST"], reverseTeamSides["CT"]);
-        }
+        } // <--- 檢查這個括號有沒有！
 
-  private CsTeam GetPlayerTeam(CCSPlayerController player)
-    {
-        // 1. 如果雙方隊伍都沒設定名單，直接回傳玩家現在所在的隊伍
-        if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
-            (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
+        private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
-            return (CsTeam)player.TeamNum;
-        }
+            // 1. 如果 JSON 沒名單，直接信任玩家隊伍 (解決 1:1 不換圖關鍵)
+            if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) && 
+                (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
+            {
+                return (CsTeam)player.TeamNum;
+            }
 
-        // 2. 你的核心改動：如果不需要白名單，就認可玩家選的隊伍，不讓他變成 None
-        CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
-        var steamId = player.SteamID;
-        try
-        {
-            // 3. 開始檢查名單（只有當 isWhitelistRequired 為 true 時這段才有實質過濾意義）
-            if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
+            // 2. 核心改動：如果不強制白名單，預設先給他當前隊伍
+            CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
+            var steamId = player.SteamID.ToString();
+
+            try
             {
-                if (teamSides[matchzyTeam1] == "CT")
+                if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
                 {
-                    playerTeam = CsTeam.CounterTerrorist;
+                    playerTeam = (teamSides[matchzyTeam1] == "CT") ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
                 }
-                else if (teamSides[matchzyTeam1] == "TERRORIST")
+                else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId] != null)
                 {
-                    playerTeam = CsTeam.Terrorist;
+                    playerTeam = (teamSides[matchzyTeam2] == "CT") ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
                 }
             }
-            else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null)
+            catch (Exception ex)
             {
-                if (teamSides[matchzyTeam2] == "CT")
-                {
-                    playerTeam = CsTeam.CounterTerrorist;
-                }
-                else if (teamSides[matchzyTeam2] == "TERRORIST")
-                {
-                    playerTeam = CsTeam.Terrorist;
-                }
+                Log($"[GetPlayerTeam Error] {ex.Message}");
             }
-            else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
-            {
-                playerTeam = CsTeam.Spectator;
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"[GetPlayerTeam - FATAL] Exception occurred: {ex.Message}");
-        }
-        return playerTeam;
-    }
+
+            return playerTeam;
+        } // <--- 檢查這個括號有沒有！
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
         {
             long matchId = liveMatchId;
