@@ -525,41 +525,39 @@ namespace MatchZy
         }
 
         public void SwapSidesInTeamData(bool swapTeams) {
-            // if (swapTeams) {
-            //     // Here, we sync matchzyTeam1 and matchzyTeam2 with the actual team1 and team2
-            //     (matchzyTeam2, matchzyTeam1) = (matchzyTeam1, matchzyTeam2);
-            // }
+            if (swapTeams) {
+                // Here, we sync matchzyTeam1 and matchzyTeam2 with the actual team1 and team2
+                (matchzyTeam2, matchzyTeam1) = (matchzyTeam1, matchzyTeam2);
+            }
 
             (teamSides[matchzyTeam1], teamSides[matchzyTeam2]) = (teamSides[matchzyTeam2], teamSides[matchzyTeam1]);
             (reverseTeamSides["CT"], reverseTeamSides["TERRORIST"]) = (reverseTeamSides["TERRORIST"], reverseTeamSides["CT"]);
         }
 
-private CsTeam GetPlayerTeam(CCSPlayerController player)
-{
-    var steamId = player.SteamID.ToString();
-
-    // 1. 如果有名單，優先按照名單分配
-    if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
-    {
-        return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam1).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
-    }
-    if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId] != null)
-    {
-        return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam2).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
-    }
-
-    // 2. 完全沒名單時（你的情況），讓系統根據陣營反查 Team1 或 Team2
-    if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
-        (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
-    {
-        CsTeam currentSide = (CsTeam)player.TeamNum;
-        if (reverseTeamSides.ContainsKey("CT") || reverseTeamSides.ContainsKey("TERRORIST"))
+        private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
-            return currentSide; 
+            var steamId = player.SteamID.ToString();
+
+            // 1. 如果有名單，優先按照名單分配
+            if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
+            {
+                return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam1).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
+            }
+            if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId] != null)
+            {
+                return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam2).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
+            }
+
+            // 2. 完全沒名單時，讓系統回傳玩家當前所在的陣營 (CsTeam)player.TeamNum
+            if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
+                (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
+            {
+                // 當前沒有任何 whitelist 限制，直接信任玩家所在的隊伍
+                return (CsTeam)player.TeamNum;
+            }
+            return isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
         }
-    }
-    return isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
-}
+
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
         {
             long matchId = liveMatchId;
@@ -573,7 +571,19 @@ private CsTeam GetPlayerTeam(CCSPlayerController player)
                 Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} has won the match");
             }
 
-            string winnerTeam = (winnerName == null) ? "none" : matchzyTeam1.seriesScore > matchzyTeam2.seriesScore ? "team1" : "team2";
+            string winnerTeam = "none";
+            
+            // 修正勝隊判定：比對名稱而不是只看分數 (因為隊伍物件可能互換了)
+            if (winnerName != null) 
+            {
+                if (matchzyTeam1.teamName == winnerName) winnerTeam = "team1";
+                else if (matchzyTeam2.teamName == winnerName) winnerTeam = "team2";
+                else winnerTeam = matchzyTeam1.seriesScore > matchzyTeam2.seriesScore ? "team1" : "team2";
+            }
+            else
+            {
+                winnerTeam = matchzyTeam1.seriesScore > matchzyTeam2.seriesScore ? "team1" : "team2";
+            }
 
             var seriesResultEvent = new MatchZySeriesResultEvent()
             {
