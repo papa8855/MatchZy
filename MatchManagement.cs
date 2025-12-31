@@ -465,29 +465,28 @@ namespace MatchZy
             UpdatePlayersMap();
         }
 
-        // --- 修正處 2：鎖死隊名防止下一回合跳回的核心邏輯 ---
+        // --- 修正處 2：還原為官方 SetTeamNames 邏輯，解決隊名跳來跳去的問題 ---
         public void SetTeamNames()
         {
-            if (reverseTeamSides.ContainsKey("CT") && reverseTeamSides.ContainsKey("TERRORIST"))
-            {
-                string ctName = reverseTeamSides["CT"].teamName;
-                string tName = reverseTeamSides["TERRORIST"].teamName;
+            // CS2 引擎機制：mp_teamname_1 對應 Team1，mp_teamname_2 對應 Team2
+            // 換邊時，CS2 會自動交換名字顯示的位置。
+            // 因此我們不應該動態修改 Cvar，而應該固定對應關係。
+            string t1Name = matchzyTeam1.teamName;
+            string t2Name = matchzyTeam2.teamName;
 
-                // 1. 重要：將正確隊名同步到 MatchConfig 字典中。
-                // 這是解決跳回問題的核心，因為插件自動執行配置時會讀取 ChangedCvars。
-                matchConfig.ChangedCvars["mp_teamname_1"] = ctName;
-                matchConfig.ChangedCvars["mp_teamname_2"] = tName;
-                
-                // 2. 更新緩存，防止重置回原始 JSON 名字
-                matchConfig.OriginalCvars["mp_teamname_1"] = ctName;
-                matchConfig.OriginalCvars["mp_teamname_2"] = tName;
+            // 更新設定檔緩存
+            matchConfig.ChangedCvars["mp_teamname_1"] = t1Name;
+            matchConfig.ChangedCvars["mp_teamname_2"] = t2Name;
+            
+            // 執行指令
+            Server.ExecuteCommand($"mp_teamname_1 \"{t1Name}\"");
+            Server.ExecuteCommand($"mp_teamname_2 \"{t2Name}\"");
 
-                // 3. 執行指令與 Cvar 對象同步
-                Server.ExecuteCommand($"mp_teamname_1 \"{ctName}\"");
-                Server.ExecuteCommand($"mp_teamname_2 \"{tName}\"");
-                ConVar.Find("mp_teamname_1")?.SetValue(ctName);
-                ConVar.Find("mp_teamname_2")?.SetValue(tName);
-            }
+            // 同步更新 ConVar 物件
+            var cvar1 = ConVar.Find("mp_teamname_1");
+            var cvar2 = ConVar.Find("mp_teamname_2");
+            cvar1?.SetValue(t1Name);
+            cvar2?.SetValue(t2Name);
         }
 
         // 透過多次計時器強制鎖定，解決 CS2 Going Live 瞬間的延遲回滾
@@ -596,12 +595,11 @@ namespace MatchZy
             ForceRefreshTeamNames();
         }
 
-// --- 修正處 3：換邊處理，徹底反轉字典中的物件指向，解決下一回合跳回來的問題 ---
+        // --- 修正處 3：換邊處理，正確更新邏輯與設定檔，但不碰 Cvar 名稱 ---
         public void SwapSidesInTeamData(bool swapTeams) {
-            // 安全檢查：確保字典裡有 CT 和 T
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
-            // 1. 執行隊伍物件交換 (這是記憶體中的交換)
+            // 1. 交換 MatchZy 內部的隊伍邏輯 (這是為了統計數據正確)
             var teamCtObj = reverseTeamSides["CT"];
             var teamTObj = reverseTeamSides["TERRORIST"];
 
@@ -611,55 +609,27 @@ namespace MatchZy
             teamSides[teamTObj] = "CT";
             teamSides[teamCtObj] = "TERRORIST";
 
-            // 2. [關鍵修正] 將結果寫死到 MatchConfig 的 MapSides 中
-            // 這樣當 SetMapSides() 在下一回合被呼叫時，它會讀到新的設定，而不是舊的 "knife"
+            // 2. [關鍵] 覆蓋 JSON 設定檔中的 "knife" 設定
+            // 這是為了防止 SetMapSides 被呼叫時把邏輯重置回預設值
             if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count)
             {
                 string newSideSetting = "";
-                
-                // 判斷現在誰變成了 CT
-                if (reverseTeamSides["CT"] == matchzyTeam1)
-                {
-                    newSideSetting = "team1_ct";
-                }
-                else if (reverseTeamSides["CT"] == matchzyTeam2)
-                {
-                    newSideSetting = "team2_ct";
-                }
+                if (reverseTeamSides["CT"] == matchzyTeam1) newSideSetting = "team1_ct";
+                else if (reverseTeamSides["CT"] == matchzyTeam2) newSideSetting = "team2_ct";
 
-                // 如果成功判斷，就覆蓋掉原本的設定 (無論原本是 "knife" 還是別的)
                 if (!string.IsNullOrEmpty(newSideSetting))
                 {
-                    string oldSide = matchConfig.MapSides[matchConfig.CurrentMapNumber];
                     matchConfig.MapSides[matchConfig.CurrentMapNumber] = newSideSetting;
-                    
-                    // 記錄日誌以便除錯
-                    Log($"[MatchZy] SwapSidesInTeamData: Config updated. Map {matchConfig.CurrentMapNumber} changed from '{oldSide}' to '{newSideSetting}'");
                 }
             }
 
-            // 3. [雙重保險] 更新 Cvar 緩存
-            // 這是為了防止系統讀取 ChangedCvars 重置隊名
-            string newCtName = reverseTeamSides["CT"].teamName;
-            string newTName = reverseTeamSides["TERRORIST"].teamName;
-
-            if (matchConfig.ChangedCvars != null)
-            {
-                matchConfig.ChangedCvars["mp_teamname_1"] = newCtName;
-                matchConfig.ChangedCvars["mp_teamname_2"] = newTName;
-            }
-            if (matchConfig.OriginalCvars != null)
-            {
-                matchConfig.OriginalCvars["mp_teamname_1"] = newCtName;
-                matchConfig.OriginalCvars["mp_teamname_2"] = newTName;
-            }
-
-            Log($"[MatchZy] Swapped Sides successfully. New CT: {newCtName}");
+            Log($"[MatchZy] Swapped Sides logic. New CT Logical Team: {reverseTeamSides["CT"].teamName}");
             
-            // 4. 立即刷新隊名顯示
+            // 3. 刷新名字 (現在 SetTeamNames 是正確的官方邏輯，會讓 CS2 自動處理顯示)
             SetTeamNames();
             ForceRefreshTeamNames();
         }
+
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
             if (!isMatchLive)
