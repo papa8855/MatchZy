@@ -535,53 +535,36 @@ namespace MatchZy
         }
 
   private CsTeam GetPlayerTeam(CCSPlayerController player)
-    {
-        // 1. 如果雙方隊伍都沒設定名單，直接回傳玩家現在所在的隊伍
-        if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
-            (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
-        {
-            return (CsTeam)player.TeamNum;
-        }
+{
+    var steamId = player.SteamID.ToString();
 
-        // 2. 你的核心改動：如果不需要白名單，就認可玩家選的隊伍，不讓他變成 None
-        CsTeam playerTeam = isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
-        var steamId = player.SteamID;
-        try
-        {
-            // 3. 開始檢查名單（只有當 isWhitelistRequired 為 true 時這段才有實質過濾意義）
-            if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId.ToString()] != null)
-            {
-                if (teamSides[matchzyTeam1] == "CT")
-                {
-                    playerTeam = CsTeam.CounterTerrorist;
-                }
-                else if (teamSides[matchzyTeam1] == "TERRORIST")
-                {
-                    playerTeam = CsTeam.Terrorist;
-                }
-            }
-            else if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId.ToString()] != null)
-            {
-                if (teamSides[matchzyTeam2] == "CT")
-                {
-                    playerTeam = CsTeam.CounterTerrorist;
-                }
-                else if (teamSides[matchzyTeam2] == "TERRORIST")
-                {
-                    playerTeam = CsTeam.Terrorist;
-                }
-            }
-            else if (matchConfig.Spectators != null && matchConfig.Spectators[steamId.ToString()] != null)
-            {
-                playerTeam = CsTeam.Spectator;
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"[GetPlayerTeam - FATAL] Exception occurred: {ex.Message}");
-        }
-        return playerTeam;
+    // 1. 如果有名單，優先按照名單分配（保留原本功能）
+    if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
+    {
+        return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam1).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
     }
+    if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId] != null)
+    {
+        return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam2).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
+    }
+
+    // 2. 【核心修正】完全沒名單時的處理邏輯
+    if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
+        (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
+    {
+        // 抓取玩家當前陣營 (2=T, 3=CT)
+        CsTeam currentSide = (CsTeam)player.TeamNum;
+
+        // 這裡不再死板回傳 player.TeamNum，而是去反查 teamSides 字典
+        // 確保不論換幾次地圖、換幾次邊，贏球的陣營都能對應到正確的 Team1 或 Team2
+        if (reverseTeamSides.ContainsKey("CT") || reverseTeamSides.ContainsKey("TERRORIST"))
+        {
+            return currentSide;
+        }
+    }
+
+    return isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
+}
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
         {
             long matchId = liveMatchId;
