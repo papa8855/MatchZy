@@ -393,7 +393,7 @@ namespace MatchZy
             return true;
         }
 
-        // --- 修正處：防止 SetMapSides 在比賽中途重置刀局後的選擇 ---
+        // --- 修正處 1：SetMapSides 防止在比賽中途重置刀局結果 ---
         public void SetMapSides() {
             int mapNumber = matchConfig.CurrentMapNumber;
             if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
@@ -401,7 +401,7 @@ namespace MatchZy
             string sideSetting = matchConfig.MapSides[mapNumber];
             
             // [關鍵修正] 如果比賽已經開始 (matchStarted) 且設定是 knife，說明我們正處於刀局後的狀態
-            // 此時絕對不能重新初始化映射，否則會把 .switch 的結果蓋掉
+            // 此時絕對不能重新初始化映射，否則會把剛才 .switch 的結果蓋掉
             if (sideSetting == "knife" && (matchStarted || isMatchLive)) {
                 Log("[SetMapSides] Match is live, preserving current post-knife sides.");
                 return; 
@@ -446,17 +446,16 @@ namespace MatchZy
             UpdatePlayersMap();
         }
 
-        // --- 修正處：SetTeamNames 應基於目前的映射動態分配給 mp_teamname_1/2 ---
+        // --- 修正處 2：SetTeamNames 應基於目前的映射動態分配給 mp_teamname_1/2 ---
         public void SetTeamNames()
         {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
-            // 抓取當前誰在 CT，誰在 T
+            // 在 CS2 中，mp_teamname_1 是顯示在 CT 槽位的名字，mp_teamname_2 是 T 槽位
+            // 我們必須確保 reverseTeamSides["CT"] 的名字被設置到 mp_teamname_1
             string ctName = reverseTeamSides["CT"].teamName;
             string tName = reverseTeamSides["TERRORIST"].teamName;
 
-            // 在 MatchZy 中，讓 mp_teamname_1 始終對應 CT 名稱，mp_teamname_2 始終對應 T 名稱
-            // 配合 mp_swapteams 使用，這樣名字就會正確跟隨陣營切換
             Server.ExecuteCommand($"mp_teamname_1 \"{ctName}\"");
             Server.ExecuteCommand($"mp_teamname_2 \"{tName}\"");
 
@@ -571,7 +570,7 @@ namespace MatchZy
             ForceRefreshTeamNames();
         }
 
-        // --- 修正處：SwapSidesInTeamData 更新映射並修改 Config 防止第一回合 Live 時被還原 ---
+        // --- 修正處 3：SwapSidesInTeamData 更新映射並修改 Config 防止第一回合 Live 時被還原 ---
         public void SwapSidesInTeamData(bool swapTeams) {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
