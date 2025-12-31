@@ -565,7 +565,7 @@ namespace MatchZy
             ForceRefreshTeamNames();
         }
 
-        // --- 修正處 3：換邊處理，徹底反轉字典中的物件指向，解決下一回合跳回來的問題 ---
+// --- 修正處 3：換邊處理，徹底反轉字典中的物件指向，解決下一回合跳回來的問題 ---
         public void SwapSidesInTeamData(bool swapTeams) {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
@@ -582,6 +582,7 @@ namespace MatchZy
 
             // 3. [核心修正] 強制根據當前狀態更新 MatchConfig
             // 不管原本是 "knife" 還是 "team1_ct"，直接寫入現在誰當 CT
+            // 這能確保下一回合系統讀取設定時，讀到的是我們交換後的結果，而不是舊的 "knife" 設定
             if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count)
             {
                 string newSideSetting = "";
