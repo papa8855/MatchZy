@@ -46,7 +46,7 @@ namespace MatchZy
         {
             if (player == null || !player.IsValid) return;
 
-            // 熱身期間，強制執行玩家的換隊請求，確保他們能找到正確隊伍
+            // 熱身期間解鎖換隊限制
             if (!isMatchLive)
             {
                 if (command.ArgCount >= 2)
@@ -61,7 +61,7 @@ namespace MatchZy
             }
 
             if (!IsPlayerAdmin(player, "css_jointeam", "@css/config")) {
-                ReplyToUserCommand(player, " [系統訊息] 比賽已經正式開始，您目前無法更換隊伍！");
+                ReplyToUserCommand(player, " [MatchZy] 比賽已經正式開始，您目前無法更換隊伍！");
             }
         }
 
@@ -390,7 +390,6 @@ namespace MatchZy
             if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
 
             string sideSetting = matchConfig.MapSides[mapNumber];
-            Log($"[SetMapSides] Map index: {mapNumber}, Setting: {sideSetting}");
 
             teamSides.Clear();
             reverseTeamSides.Clear();
@@ -424,16 +423,22 @@ namespace MatchZy
             UpdatePlayersMap();
         }
 
+        // --- 核心修正：解決記分板 UI 不刷新的問題 ---
         public void SetTeamNames()
         {
             if (reverseTeamSides.ContainsKey("CT") && reverseTeamSides.ContainsKey("TERRORIST"))
             {
-                // mp_teamname_1 是 CT (記分板左側), mp_teamname_2 是 T (記分板右側)
+                // 1. 先強制發送空的隊名來刷新 CS2 的記分板緩存
+                Server.ExecuteCommand("mp_teamname_1 \" \"");
+                Server.ExecuteCommand("mp_teamname_2 \" \"");
+
+                // 2. 設定真正的隊伍名稱
+                // mp_teamname_1 固定顯示在 CT 方的 UI
+                // mp_teamname_2 固定顯示在 T 方的 UI
                 Server.ExecuteCommand($"mp_teamname_1 \"{reverseTeamSides["CT"].teamName}\"");
                 Server.ExecuteCommand($"mp_teamname_2 \"{reverseTeamSides["TERRORIST"].teamName}\"");
                 
-                // 額外 Log 用於除錯
-                Log($"[SetTeamNames] Executed: mp_teamname_1 (CT) = {reverseTeamSides["CT"].teamName}, mp_teamname_2 (T) = {reverseTeamSides["TERRORIST"].teamName}");
+                Log($"[SetTeamNames] Forced UI Refresh: CT={reverseTeamSides["CT"].teamName}, T={reverseTeamSides["TERRORIST"].teamName}");
             }
         }
 
@@ -527,21 +532,19 @@ namespace MatchZy
                 matchzyTeam2.teamName = teamName;
             }
             
-            // 重新同步名稱
             SetTeamNames();
         }
 
-        // --- 核心修正：徹底解決刀局結束選邊後，記分板名稱沒跟著換的問題 ---
+        // --- 核心修正：解決刀局選擇後的記分板刷新邏輯 ---
         public void SwapSidesInTeamData(bool swapTeams) {
-            Log($"[SwapSidesInTeamData] Side swap triggered. Current state: CT: {reverseTeamSides["CT"].teamName}, T: {reverseTeamSides["TERRORIST"].teamName}");
+            Log($"[SwapSidesInTeamData] Start Side Swap. Current CT: {reverseTeamSides["CT"].teamName}");
 
-            // 1. 交換 Team1 和 Team2 物件內部的邊界分配數據
-            string tempSide = teamSides[matchzyTeam1];
+            // 1. 交換 Team1 與 Team2 物件的陣營屬性
+            string team1OldSide = teamSides[matchzyTeam1];
             teamSides[matchzyTeam1] = teamSides[matchzyTeam2];
-            teamSides[matchzyTeam2] = tempSide;
+            teamSides[matchzyTeam2] = team1OldSide;
 
-            // 2. 更新反向查找字典 (CT 是誰, T 是誰)
-            // 根據交換後的數據重新分配字典內容
+            // 2. 重新根據新的 side 分配刷新反向查找字典
             if (teamSides[matchzyTeam1] == "CT") {
                 reverseTeamSides["CT"] = matchzyTeam1;
                 reverseTeamSides["TERRORIST"] = matchzyTeam2;
@@ -550,13 +553,13 @@ namespace MatchZy
                 reverseTeamSides["TERRORIST"] = matchzyTeam1;
             }
 
-            // 3. 立即發送指令給伺服器刷新隊伍名稱
+            // 3. 觸發強制重新設定隊伍名稱 (帶有清空邏輯)
             SetTeamNames();
             
-            // 4. 強制刷新所有玩家的隊伍對應 (這會觸發 UI 更新)
+            // 4. 強制刷新所有玩家的隊伍關聯，確保記分板 Tab 介面重繪
             UpdatePlayersMap();
 
-            Log($"[SwapSidesInTeamData] Swap complete. New state: CT (mp_teamname_1): {reverseTeamSides["CT"].teamName}, T (mp_teamname_2): {reverseTeamSides["TERRORIST"].teamName}");
+            Log($"[SwapSidesInTeamData] Final Sync Complete. New CT: {reverseTeamSides["CT"].teamName}");
         }
 
         private CsTeam GetPlayerTeam(CCSPlayerController player)
