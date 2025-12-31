@@ -41,13 +41,13 @@ namespace MatchZy
             HandleTeamNameChangeCommand(player, command.ArgString, 2);
         }
 
-        // --- 修正處 1：解決熱身期間換隊「人留在原地」以及角色模型沒換的 Bug ---
+        // --- 修正處 1：解決熱身換隊「人留在原地」以及角色模型沒換的 Bug ---
         [ConsoleCommand("jointeam", "攔截換隊指令以允許熱身期間自由換隊")]
         public void OnJoinTeamCommand(CCSPlayerController? player, CommandInfo command)
         {
             if (player == null || !player.IsValid) return;
 
-            // 如果目前不是比賽進行中 (Warmup 階段)，允許玩家執行換隊
+            // 如果目前不是比賽進行中 (Warmup 階段)，強制執行玩家的換隊請求
             if (!isMatchLive)
             {
                 if (command.ArgCount >= 2)
@@ -57,8 +57,7 @@ namespace MatchZy
                         // 1. 執行邏輯換隊
                         player.SwitchTeam((CsTeam)teamSide);
                         
-                        // 2. 核心修正：強制重生。
-                        // 這樣玩家會立即在正確隊伍的出生點出現，並更換對應的陣營模型。
+                        // 2. 核心修正：強制重生，解決玩家留在原地、模型沒換的問題
                         AddTimer(0.2f, () => {
                             if (player != null && player.IsValid) {
                                 player.Respawn();
@@ -70,7 +69,7 @@ namespace MatchZy
                 return; 
             }
 
-            // 比賽正式開始後，非管理員禁止換隊
+            // 比賽開始後，非管理員禁止換隊
             if (!IsPlayerAdmin(player, "css_jointeam", "@css/config")) {
                 ReplyToUserCommand(player, " [MatchZy] 比賽已經正式開始，您目前無法更換隊伍！");
             }
@@ -435,7 +434,7 @@ namespace MatchZy
             UpdatePlayersMap();
         }
 
-        // --- 修正處 2：鎖死隊名防止跳回的核心邏輯 ---
+        // --- 修正處 2：鎖死隊名防止下一回合跳回的核心邏輯 ---
         public void SetTeamNames()
         {
             if (reverseTeamSides.ContainsKey("CT") && reverseTeamSides.ContainsKey("TERRORIST"))
@@ -443,26 +442,24 @@ namespace MatchZy
                 string ctName = reverseTeamSides["CT"].teamName;
                 string tName = reverseTeamSides["TERRORIST"].teamName;
 
-                // 1. 重要：將隊名同步至 MatchConfig 字典。
-                // 當插件自動刷新配置或執行 .cfg 時，會從 ChangedCvars 取值，這能確保名字不跳回原本的 JSON 名。
+                // 1. 重要：將正確隊名同步到 MatchConfig 字典中。
+                // 這是解決跳回問題的核心，因為插件自動執行配置時會讀取 ChangedCvars。
                 matchConfig.ChangedCvars["mp_teamname_1"] = ctName;
                 matchConfig.ChangedCvars["mp_teamname_2"] = tName;
-
-                // 2. 更新原始緩存，防止重置時恢復成 Team1
+                
+                // 2. 更新緩存，防止重置回原始 JSON 名字
                 matchConfig.OriginalCvars["mp_teamname_1"] = ctName;
                 matchConfig.OriginalCvars["mp_teamname_2"] = tName;
 
-                // 3. 執行指令。mp_teamname_1 固定代表 CT，mp_teamname_2 固定代表 T。
+                // 3. 執行指令與 Cvar 對象同步
                 Server.ExecuteCommand($"mp_teamname_1 \"{ctName}\"");
                 Server.ExecuteCommand($"mp_teamname_2 \"{tName}\"");
-                
-                // 4. 操作 Cvar 物件確保 UI 刷新
                 ConVar.Find("mp_teamname_1")?.SetValue(ctName);
                 ConVar.Find("mp_teamname_2")?.SetValue(tName);
             }
         }
 
-        // 使用多重計時器，解決 CS2 引擎在 Going Live 瞬間可能產生的延遲回滾
+        // 透過多次計時器強制鎖定，解決 CS2 Going Live 瞬間的延遲回滾
         public void ForceRefreshTeamNames()
         {
             SetTeamNames();
@@ -568,24 +565,23 @@ namespace MatchZy
             ForceRefreshTeamNames();
         }
 
-        // --- 修正處 3：解決換邊後隊名與隊伍對象掛鉤的問題 ---
+        // --- 修正處 3：換邊處理，徹底反轉字典中的物件指向，解決下一回合跳回來的問題 ---
         public void SwapSidesInTeamData(bool swapTeams) {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
-            // 取得當前的隊伍物件
-            var teamCt = reverseTeamSides["CT"];
-            var teamT = reverseTeamSides["TERRORIST"];
+            // 獲取當前隊伍物件
+            var teamCtObj = reverseTeamSides["CT"];
+            var teamTObj = reverseTeamSides["TERRORIST"];
 
-            // 交換字典指標：原本是 CT 的物件現在變成 T，T 的物件現在變成 CT
-            reverseTeamSides["CT"] = teamT;
-            reverseTeamSides["TERRORIST"] = teamCt;
+            // 徹底反轉字典指標：原本是 CT 的物件現在指向 T，原本是 T 的指向 CT
+            reverseTeamSides["CT"] = teamTObj;
+            reverseTeamSides["TERRORIST"] = teamCtObj;
 
-            teamSides[teamT] = "CT";
-            teamSides[teamCt] = "TERRORIST";
+            teamSides[teamTObj] = "CT";
+            teamSides[teamCtObj] = "TERRORIST";
 
-            Log($"[MatchZy] Sides Swapped. New CT Object: {reverseTeamSides["CT"].teamName}");
+            Log($"[MatchZy] Swapped Sides successfully. New CT: {reverseTeamSides["CT"].teamName}");
             
-            // 換邊後，立即觸發多次隊名同步，確保記分板更新
             ForceRefreshTeamNames();
         }
 
