@@ -580,25 +580,35 @@ namespace MatchZy
             teamSides[teamTObj] = "CT";
             teamSides[teamCtObj] = "TERRORIST";
 
-            // [新增修正] 同步更新 MatchConfig 中的 MapSides 設定
-            // 原因：JSON 載入的設定若沒改，下一回合系統檢查時會把隊伍強制重置回 JSON 的設定
+            // 3. [核心修正] 強制根據當前狀態更新 MatchConfig
+            // 不管原本是 "knife" 還是 "team1_ct"，直接寫入現在誰當 CT
             if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count)
             {
-                string currentSide = matchConfig.MapSides[matchConfig.CurrentMapNumber];
+                string newSideSetting = "";
                 
-                if (currentSide == "team1_ct") matchConfig.MapSides[matchConfig.CurrentMapNumber] = "team1_t";
-                else if (currentSide == "team1_t") matchConfig.MapSides[matchConfig.CurrentMapNumber] = "team1_ct";
-                else if (currentSide == "team2_ct") matchConfig.MapSides[matchConfig.CurrentMapNumber] = "team2_t";
-                else if (currentSide == "team2_t") matchConfig.MapSides[matchConfig.CurrentMapNumber] = "team2_ct";
-                
-                Log($"[MatchZy] Updated matchConfig.MapSides for map {matchConfig.CurrentMapNumber} due to knife swap.");
+                // 檢查現在誰是 CT
+                if (reverseTeamSides["CT"] == matchzyTeam1)
+                {
+                    newSideSetting = "team1_ct";
+                }
+                else if (reverseTeamSides["CT"] == matchzyTeam2)
+                {
+                    newSideSetting = "team2_ct";
+                }
+
+                // 如果成功判斷出新的設定，就覆蓋掉 MapSides (包含覆蓋掉 "knife")
+                if (!string.IsNullOrEmpty(newSideSetting))
+                {
+                    string oldSide = matchConfig.MapSides[matchConfig.CurrentMapNumber];
+                    matchConfig.MapSides[matchConfig.CurrentMapNumber] = newSideSetting;
+                    Log($"[MatchZy] SwapSidesInTeamData: Updated MapSides[{matchConfig.CurrentMapNumber}] from '{oldSide}' to '{newSideSetting}'");
+                }
             }
 
             Log($"[MatchZy] Swapped Sides successfully. New CT: {reverseTeamSides["CT"].teamName}");
             
             ForceRefreshTeamNames();
         }
-
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
             if (!isMatchLive)
