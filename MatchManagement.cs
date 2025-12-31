@@ -46,17 +46,14 @@ namespace MatchZy
         {
             if (player == null || !player.IsValid) return;
 
-            // 如果目前不是比賽進行中 (Warmup 階段)，強制執行玩家的換隊請求
             if (!isMatchLive)
             {
                 if (command.ArgCount >= 2)
                 {
                     if (int.TryParse(command.ArgByIndex(1), out int teamSide))
                     {
-                        // 1. 執行邏輯換隊
                         player.SwitchTeam((CsTeam)teamSide);
                         
-                        // 2. 核心修正：強制重生，解決玩家留在原地、模型沒換的問題
                         AddTimer(0.2f, () => {
                             if (player != null && player.IsValid) {
                                 player.Respawn();
@@ -68,7 +65,6 @@ namespace MatchZy
                 return; 
             }
 
-            // 比賽開始後，非管理員禁止換隊
             if (!IsPlayerAdmin(player, "css_jointeam", "@css/config")) {
                 ReplyToUserCommand(player, " [MatchZy] 比賽已經正式開始，您目前無法更換隊伍！");
             }
@@ -393,7 +389,7 @@ namespace MatchZy
             return true;
         }
 
-        // --- 修正處 1：SetMapSides 防止在比賽中途重置刀局結果 ---
+        // --- 核心修正 1：防止 SetMapSides 在比賽中途重置 ---
         public void SetMapSides() {
             int mapNumber = matchConfig.CurrentMapNumber;
             if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
@@ -403,7 +399,7 @@ namespace MatchZy
             // [關鍵修正] 如果比賽已經開始 (matchStarted) 且設定是 knife，說明我們正處於刀局後的狀態
             // 此時絕對不能重新初始化映射，否則會把剛才 .switch 的結果蓋掉
             if (sideSetting == "knife" && (matchStarted || isMatchLive)) {
-                Log("[SetMapSides] Match is live, preserving current post-knife sides.");
+                Log("[SetMapSides] Match is live or started, skipping side reset to preserve knife selection.");
                 return; 
             }
 
@@ -446,13 +442,13 @@ namespace MatchZy
             UpdatePlayersMap();
         }
 
-        // --- 修正處 2：SetTeamNames 應基於目前的映射動態分配給 mp_teamname_1/2 ---
+        // --- 核心修正 2：SetTeamNames 應基於目前的映射動態分配給 mp_teamname_1/2 ---
         public void SetTeamNames()
         {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
             // 在 CS2 中，mp_teamname_1 是顯示在 CT 槽位的名字，mp_teamname_2 是 T 槽位
-            // 我們必須確保 reverseTeamSides["CT"] 的名字被設置到 mp_teamname_1
+            // 我們抓取邏輯映射中「誰現在是 CT」，就把它的名字傳給 mp_teamname_1
             string ctName = reverseTeamSides["CT"].teamName;
             string tName = reverseTeamSides["TERRORIST"].teamName;
 
@@ -570,7 +566,7 @@ namespace MatchZy
             ForceRefreshTeamNames();
         }
 
-        // --- 修正處 3：SwapSidesInTeamData 更新映射並修改 Config 防止第一回合 Live 時被還原 ---
+        // --- 核心修正 3：SwapSidesInTeamData 更新映射並「永久修改」Config 以防止 Going Live 時被還原 ---
         public void SwapSidesInTeamData(bool swapTeams) {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
@@ -583,7 +579,9 @@ namespace MatchZy
             teamSides[teamTObj] = "CT";
             teamSides[teamCtObj] = "TERRORIST";
 
-            // [關鍵] 既然已經換邊，就要更新地圖設定，防止第一回合 Live 時被 SetMapSides 重置回預設
+            // [關鍵] 此處必須修改 matchConfig 中的 MapSides。
+            // 原版 MatchZy 在刀局後執行 mp_restartgame 會觸發 StartLive 重新檢查配置。
+            // 如果此處不把配置中的 "knife" 改掉，StartLive 就會重新呼叫 SetMapSides 並把陣營映射重置。
             if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count)
             {
                 string newSideSetting = "";
