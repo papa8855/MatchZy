@@ -569,16 +569,30 @@ namespace MatchZy
         public void SwapSidesInTeamData(bool swapTeams) {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
-            // 獲取當前隊伍物件
+            // 1. 獲取當前隊伍物件
             var teamCtObj = reverseTeamSides["CT"];
             var teamTObj = reverseTeamSides["TERRORIST"];
 
-            // 徹底反轉字典指標：原本是 CT 的物件現在指向 T，原本是 T 的指向 CT
+            // 2. 徹底反轉字典指標：原本是 CT 的物件現在指向 T，原本是 T 的指向 CT
             reverseTeamSides["CT"] = teamTObj;
             reverseTeamSides["TERRORIST"] = teamCtObj;
 
             teamSides[teamTObj] = "CT";
             teamSides[teamCtObj] = "TERRORIST";
+
+            // [新增修正] 同步更新 MatchConfig 中的 MapSides 設定
+            // 原因：JSON 載入的設定若沒改，下一回合系統檢查時會把隊伍強制重置回 JSON 的設定
+            if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count)
+            {
+                string currentSide = matchConfig.MapSides[matchConfig.CurrentMapNumber];
+                
+                if (currentSide == "team1_ct") matchConfig.MapSides[matchConfig.CurrentMapNumber] = "team1_t";
+                else if (currentSide == "team1_t") matchConfig.MapSides[matchConfig.CurrentMapNumber] = "team1_ct";
+                else if (currentSide == "team2_ct") matchConfig.MapSides[matchConfig.CurrentMapNumber] = "team2_t";
+                else if (currentSide == "team2_t") matchConfig.MapSides[matchConfig.CurrentMapNumber] = "team2_ct";
+                
+                Log($"[MatchZy] Updated matchConfig.MapSides for map {matchConfig.CurrentMapNumber} due to knife swap.");
+            }
 
             Log($"[MatchZy] Swapped Sides successfully. New CT: {reverseTeamSides["CT"].teamName}");
             
