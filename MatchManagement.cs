@@ -41,20 +41,20 @@ namespace MatchZy
             HandleTeamNameChangeCommand(player, command.ArgString, 2);
         }
 
-        // --- 核心修正 1：熱身期間允許自由換隊 ---
+        // --- 修正處 1：熱身期間允許自由換隊 ---
         [ConsoleCommand("jointeam", "攔截換隊指令以允許熱身期間自由換隊")]
         public void OnJoinTeamCommand(CCSPlayerController? player, CommandInfo command)
         {
             if (player == null || !player.IsValid) return;
 
-            // 如果目前不是比賽進行中 (isMatchLive = false)，允許玩家自由換隊
+            // 如果目前不是比賽正式開始狀態 (isMatchLive 為 false)，允許玩家自由換隊
             if (!isMatchLive)
             {
                 if (command.ArgCount >= 2)
                 {
                     if (int.TryParse(command.ArgByIndex(1), out int teamSide))
                     {
-                        // 直接執行換隊，繞過插件限制
+                        // 直接強制搬移玩家，繞過所有插件限制
                         player.SwitchTeam((CsTeam)teamSide);
                         return;
                     }
@@ -62,7 +62,7 @@ namespace MatchZy
                 return; 
             }
 
-            // 比賽正式開始後，非管理員禁止換隊
+            // 比賽開始後，非管理員禁止換隊
             if (!IsPlayerAdmin(player, "css_jointeam", "@css/config")) {
                 ReplyToUserCommand(player, " [MatchZy] 比賽已經正式開始，您目前無法更換隊伍！");
             }
@@ -427,7 +427,7 @@ namespace MatchZy
             UpdatePlayersMap();
         }
 
-        // --- 核心修正 2：強效鎖死隊名 (防止 MatchConfig 的字典回滾) ---
+        // --- 核心修正 2：強效鎖死隊名 (同步到 MatchConfig 字典中) ---
         public void SetTeamNames()
         {
             if (reverseTeamSides.ContainsKey("CT") && reverseTeamSides.ContainsKey("TERRORIST"))
@@ -435,26 +435,26 @@ namespace MatchZy
                 string ctName = reverseTeamSides["CT"].teamName;
                 string tName = reverseTeamSides["TERRORIST"].teamName;
 
-                // 1. 同步到 MatchConfig 字典。
-                // 這是關鍵：當插件執行 ExecuteChangedConvars 或重啟比賽時，會從 ChangedCvars 取值。
+                // 1. 同步到 MatchConfig 的字典。這非常重要！
+                // MatchZy 插件在執行 live.cfg 或自動刷新時，會讀取 ChangedCvars。只要這裡的值對了，它刷幾次都是正確的隊名。
                 matchConfig.ChangedCvars["mp_teamname_1"] = ctName;
                 matchConfig.ChangedCvars["mp_teamname_2"] = tName;
 
-                // 2. 更新原始緩存值，防止重置回 Team1
+                // 2. 同步更新 OriginalCvars，防止重置時恢復成 Team1
                 matchConfig.OriginalCvars["mp_teamname_1"] = ctName;
                 matchConfig.OriginalCvars["mp_teamname_2"] = tName;
 
-                // 3. 直接設置伺服器 Cvar 對象 (最速生效)
+                // 3. 直接設置伺服器 Cvar 物件
                 ConVar.Find("mp_teamname_1")?.SetValue(ctName);
                 ConVar.Find("mp_teamname_2")?.SetValue(tName);
 
-                // 4. 執行命令備援 (刷新記分板)
+                // 4. 執行命令備援 (這會直接刷新記分板介面)
                 Server.ExecuteCommand($"mp_teamname_1 \"{ctName}\"");
                 Server.ExecuteCommand($"mp_teamname_2 \"{tName}\"");
             }
         }
 
-        // 使用多重定時器，對付 CS2 引擎在 Going Live 瞬間的延遲回滾
+        // 使用多重計時器，對付 CS2 引擎在 Going Live 瞬間的延遲回滾
         public void ForceRefreshTeamNames()
         {
             SetTeamNames();
@@ -560,7 +560,7 @@ namespace MatchZy
             ForceRefreshTeamNames();
         }
 
-        // --- 核心修正 3：徹底同步換邊後的字典對象 ---
+        // --- 核心修正 3：徹底同步換邊後的對象指向 ---
         public void SwapSidesInTeamData(bool swapTeams) {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
@@ -577,6 +577,7 @@ namespace MatchZy
 
             Log($"[MatchZy] Swapped Sides. New CT: {reverseTeamSides["CT"].teamName}");
             
+            // 立即執行強力同步
             ForceRefreshTeamNames();
         }
 
