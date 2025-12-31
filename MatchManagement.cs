@@ -41,20 +41,20 @@ namespace MatchZy
             HandleTeamNameChangeCommand(player, command.ArgString, 2);
         }
 
-        // --- 新增：攔截換隊指令，解決熱身選錯隊伍按 M 沒反應的問題 ---
+        // --- 修正處：允許熱身期間按 M 鍵強制換隊 ---
         [ConsoleCommand("jointeam", "攔截換隊指令以允許熱身期間自由換隊")]
         public void OnJoinTeamCommand(CCSPlayerController? player, CommandInfo command)
         {
             if (player == null || !player.IsValid) return;
 
-            // 如果目前不是比賽進行中 (Warmup)
+            // 如果目前不是比賽進行中 (Warmup/Knife round 前)，強制執行玩家的換隊請求
             if (!isMatchLive)
             {
                 if (command.ArgCount >= 2)
                 {
                     if (int.TryParse(command.ArgByIndex(1), out int teamSide))
                     {
-                        // 使用 SwitchTeam 強制搬移 (CS2 插件通用方法)
+                        // 直接強制搬移玩家，繞過所有插件限制
                         player.SwitchTeam((CsTeam)teamSide);
                         return;
                     }
@@ -62,9 +62,9 @@ namespace MatchZy
                 return; 
             }
 
-            // 比賽開始後才進行限制
+            // 比賽開始後，非管理員禁止換隊
             if (!IsPlayerAdmin(player, "css_jointeam", "@css/config")) {
-                ReplyToUserCommand(player, Localizer["matchzy.mm.teamcannotbechanged"]);
+                ReplyToUserCommand(player, " [MatchZy] 比賽已經正式開始，您目前無法更換隊伍！");
             }
         }
 
@@ -398,7 +398,7 @@ namespace MatchZy
             teamSides.Clear();
             reverseTeamSides.Clear();
 
-            // 修正：Astralis (Team1) 永遠是 matchzyTeam1, NaVi (Team2) 永遠是 matchzyTeam2
+            // 修正：始終確保 matchzyTeam1 對應 JSON 中的 Team1，僅根據設定分配 CT/T 權限
             if (sideSetting == "team1_ct" || sideSetting == "team2_t")
             {
                 teamSides[matchzyTeam1] = "CT";
@@ -415,7 +415,7 @@ namespace MatchZy
                 reverseTeamSides["TERRORIST"] = matchzyTeam1;
                 isKnifeRequired = false;
             }
-            else // knife
+            else if (sideSetting == "knife")
             {
                 isKnifeRequired = true;
                 teamSides[matchzyTeam1] = "CT";
@@ -425,19 +425,29 @@ namespace MatchZy
             }
 
             SetTeamNames();
+            // 延時刷新，確保記分板在換隊後正確顯示
+            AddTimer(0.5f, SetTeamNames);
             UpdatePlayersMap();
+            Log($"[SetMapSides] Side Assignment complete: CT: {reverseTeamSides["CT"].teamName}, T: {reverseTeamSides["TERRORIST"].teamName}");
         }
 
-        // --- 核心修正：解決記分板與 EResult 3 報錯問題 ---
+        // --- 核心修正處：加強記分板隊名同步能力 ---
         public void SetTeamNames()
         {
             if (reverseTeamSides.ContainsKey("CT") && reverseTeamSides.ContainsKey("TERRORIST"))
             {
-                // mp_teamname_1 固定對應 CT, mp_teamname_2 固定對應 T
-                Server.ExecuteCommand($"mp_teamname_1 \"{reverseTeamSides["CT"].teamName}\"");
-                Server.ExecuteCommand($"mp_teamname_2 \"{reverseTeamSides["TERRORIST"].teamName}\"");
-                
-                Log($"[SetTeamNames] CT: {reverseTeamSides["CT"].teamName}, T: {reverseTeamSides["TERRORIST"].teamName}");
+                string ctName = reverseTeamSides["CT"].teamName;
+                string tName = reverseTeamSides["TERRORIST"].teamName;
+
+                // 1. 使用伺服器指令設置
+                Server.ExecuteCommand($"mp_teamname_1 \"{ctName}\"");
+                Server.ExecuteCommand($"mp_teamname_2 \"{tName}\"");
+
+                // 2. 直接操作 ConVar 對象 (這對即時刷新記分板非常重要)
+                var team1Cvar = ConVar.Find("mp_teamname_1");
+                var team2Cvar = ConVar.Find("mp_teamname_2");
+                if (team1Cvar != null) team1Cvar.SetValue(ctName);
+                if (team2Cvar != null) team2Cvar.SetValue(tName);
             }
         }
 
@@ -527,43 +537,36 @@ namespace MatchZy
 
             if (teamNum == 1) {
                 matchzyTeam1.teamName = teamName;
+                teamSides[matchzyTeam1] = "CT";
+                reverseTeamSides["CT"] = matchzyTeam1;
             } else if (teamNum == 2) {
                 matchzyTeam2.teamName = teamName;
+                teamSides[matchzyTeam2] = "TERRORIST";
+                reverseTeamSides["TERRORIST"] = matchzyTeam2;
             }
             SetTeamNames();
         }
 
-        // --- 核心修正 2：徹底解決刀局結束選邊後的數據交換與 UI 閃爍 ---
+        // --- 核心修正 2：徹底解決 BO1/BO3 第二、三張圖隊名反轉的問題 ---
         public void SwapSidesInTeamData(bool swapTeams) {
-            Log($"[SwapSidesInTeamData] Start Side Swap.");
-
-            // 1. 交換 Team 物件內部的陣營標記
-            string oldTeam1Side = teamSides[matchzyTeam1];
-            teamSides[matchzyTeam1] = teamSides[matchzyTeam2];
-            teamSides[matchzyTeam2] = oldTeam1Side;
-
-            // 2. 更新反向字典
-            if (teamSides[matchzyTeam1] == "CT") {
-                reverseTeamSides["CT"] = matchzyTeam1;
-                reverseTeamSides["TERRORIST"] = matchzyTeam2;
-            } else {
-                reverseTeamSides["CT"] = matchzyTeam2;
-                reverseTeamSides["TERRORIST"] = matchzyTeam1;
-            }
-
-            // 3. 解決記分板不刷新的暴力手段：先清除，0.2秒後重新設定
-            Server.ExecuteCommand("mp_teamname_1 \" \"");
-            Server.ExecuteCommand("mp_teamname_2 \" \"");
-
-            AddTimer(0.2f, () => {
-                SetTeamNames();
-                UpdatePlayersMap();
-            });
+            // 僅交換它們目前在字典中分配的 CT/T 標籤。
+            (teamSides[matchzyTeam1], teamSides[matchzyTeam2]) = (teamSides[matchzyTeam2], teamSides[matchzyTeam1]);
+            (reverseTeamSides["CT"], reverseTeamSides["TERRORIST"]) = (reverseTeamSides["TERRORIST"], reverseTeamSides["CT"]);
+            
+            // 同步伺服器上的隊伍名稱
+            SetTeamNames();
+            
+            // 增加延遲刷新，應對刀局選隊後的介面延遲
+            AddTimer(0.5f, SetTeamNames);
         }
 
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
-            if (!isMatchLive) return (CsTeam)player.TeamNum;
+            // 熱身期間解鎖隊伍，讓玩家自由換隊
+            if (!isMatchLive)
+            {
+                return (CsTeam)player.TeamNum;
+            }
 
             var steamId = player.SteamID.ToString();
 
@@ -576,6 +579,7 @@ namespace MatchZy
                 return teamSides.ContainsKey(matchzyTeam2) && teamSides[matchzyTeam2] == "CT" ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
             }
 
+            // 如果沒有 SteamID 名單，則不鎖定位置
             if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
                 (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
             {
