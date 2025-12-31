@@ -41,19 +41,20 @@ namespace MatchZy
             HandleTeamNameChangeCommand(player, command.ArgString, 2);
         }
 
-        // --- 核心修正：確保熱身期間自由換隊 ---
+        // --- 新增：攔截換隊指令，解決熱身選錯隊伍按 M 沒反應的問題 ---
         [ConsoleCommand("jointeam", "攔截換隊指令以允許熱身期間自由換隊")]
         public void OnJoinTeamCommand(CCSPlayerController? player, CommandInfo command)
         {
             if (player == null || !player.IsValid) return;
 
-            // 熱身期間，強制執行玩家的換隊請求
+            // 如果目前不是比賽進行中 (Warmup)
             if (!isMatchLive)
             {
                 if (command.ArgCount >= 2)
                 {
                     if (int.TryParse(command.ArgByIndex(1), out int teamSide))
                     {
+                        // 使用 SwitchTeam 強制搬移 (CS2 插件通用方法)
                         player.SwitchTeam((CsTeam)teamSide);
                         return;
                     }
@@ -61,8 +62,9 @@ namespace MatchZy
                 return; 
             }
 
+            // 比賽開始後才進行限制
             if (!IsPlayerAdmin(player, "css_jointeam", "@css/config")) {
-                ReplyToUserCommand(player, " [MatchZy] 比賽已經正式開始，您目前無法更換隊伍！");
+                ReplyToUserCommand(player, Localizer["matchzy.mm.teamcannotbechanged"]);
             }
         }
 
@@ -387,6 +389,7 @@ namespace MatchZy
 
         public void SetMapSides() {
             int mapNumber = matchConfig.CurrentMapNumber;
+            
             if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
 
             string sideSetting = matchConfig.MapSides[mapNumber];
@@ -395,7 +398,7 @@ namespace MatchZy
             teamSides.Clear();
             reverseTeamSides.Clear();
 
-            // Astralis (Team1) 永遠是 matchzyTeam1, NaVi (Team2) 永遠是 matchzyTeam2
+            // 修正：Astralis (Team1) 永遠是 matchzyTeam1, NaVi (Team2) 永遠是 matchzyTeam2
             if (sideSetting == "team1_ct" || sideSetting == "team2_t")
             {
                 teamSides[matchzyTeam1] = "CT";
@@ -425,16 +428,16 @@ namespace MatchZy
             UpdatePlayersMap();
         }
 
-        // --- 核心修正 1：移除循環調用，解決 EResult 3 報錯與隊名閃爍 ---
+        // --- 核心修正：解決記分板與 EResult 3 報錯問題 ---
         public void SetTeamNames()
         {
             if (reverseTeamSides.ContainsKey("CT") && reverseTeamSides.ContainsKey("TERRORIST"))
             {
-                // mp_teamname_1 固定顯示在 CT 側，mp_teamname_2 固定顯示在 T 側
+                // mp_teamname_1 固定對應 CT, mp_teamname_2 固定對應 T
                 Server.ExecuteCommand($"mp_teamname_1 \"{reverseTeamSides["CT"].teamName}\"");
                 Server.ExecuteCommand($"mp_teamname_2 \"{reverseTeamSides["TERRORIST"].teamName}\"");
                 
-                Log($"[SetTeamNames] Executed: mp_teamname_1(CT)={reverseTeamSides["CT"].teamName}, mp_teamname_2(T)={reverseTeamSides["TERRORIST"].teamName}");
+                Log($"[SetTeamNames] CT: {reverseTeamSides["CT"].teamName}, T: {reverseTeamSides["TERRORIST"].teamName}");
             }
         }
 
@@ -530,16 +533,16 @@ namespace MatchZy
             SetTeamNames();
         }
 
-        // --- 核心修正 2：刀局選擇後的暴力刷新邏輯 (防止 UI 卡死) ---
+        // --- 核心修正 2：徹底解決刀局結束選邊後的數據交換與 UI 閃爍 ---
         public void SwapSidesInTeamData(bool swapTeams) {
-            Log($"[SwapSidesInTeamData] Side swap started. CT was: {reverseTeamSides["CT"].teamName}");
+            Log($"[SwapSidesInTeamData] Start Side Swap.");
 
-            // 1. 交換 Team 物件內部的 Side 分配
-            string team1OldSide = teamSides[matchzyTeam1];
+            // 1. 交換 Team 物件內部的陣營標記
+            string oldTeam1Side = teamSides[matchzyTeam1];
             teamSides[matchzyTeam1] = teamSides[matchzyTeam2];
-            teamSides[matchzyTeam2] = team1OldSide;
+            teamSides[matchzyTeam2] = oldTeam1Side;
 
-            // 2. 重新根據 Side 分配更新反向字典
+            // 2. 更新反向字典
             if (teamSides[matchzyTeam1] == "CT") {
                 reverseTeamSides["CT"] = matchzyTeam1;
                 reverseTeamSides["TERRORIST"] = matchzyTeam2;
@@ -549,14 +552,12 @@ namespace MatchZy
             }
 
             // 3. 解決記分板不刷新的暴力手段：先清除，0.2秒後重新設定
-            // 這裡使用定時器是安全的，因為它不是遞迴調用
             Server.ExecuteCommand("mp_teamname_1 \" \"");
             Server.ExecuteCommand("mp_teamname_2 \" \"");
 
             AddTimer(0.2f, () => {
                 SetTeamNames();
                 UpdatePlayersMap();
-                Log($"[SwapSidesInTeamData] UI Refresh Complete. New CT: {reverseTeamSides["CT"].teamName}");
             });
         }
 
