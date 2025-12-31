@@ -41,23 +41,22 @@ namespace MatchZy
             HandleTeamNameChangeCommand(player, command.ArgString, 2);
         }
 
-        // --- 新增內容：允許熱身期間自由換隊 ---
+        // --- 新增：攔截 jointeam 指令，允許熱身期間自由換隊 ---
         [ConsoleCommand("jointeam", "攔截換隊指令以允許熱身期間自由換隊")]
         public void OnJoinTeamCommand(CCSPlayerController? player, CommandInfo command)
         {
             if (player == null || !player.IsValid) return;
 
-            // 如果比賽已經開始 (Live)，則限制換隊
+            // 如果比賽已經開始 (isMatchLive 為 true)
             if (isMatchLive)
             {
-                // 如果是管理員，可能想允許換隊，但一般玩家禁止
+                // 比賽中禁止更換隊伍（除非是管理員）
                 if (!IsPlayerAdmin(player, "css_jointeam", "@css/config")) {
                     ReplyToUserCommand(player, " [MatchZy] 比賽已經開始，您無法在比賽期間更換隊伍！");
                     return;
                 }
             }
-            
-            // 熱身期間不進行攔截，讓原生的 jointeam 指令執行
+            // 如果 isMatchLive 為 false (熱身中)，不做任何限制，讓玩家可以按 M 換隊
         }
 
         [ConsoleCommand("matchzy_loadmatch", "Loads a match from the given JSON file path (relative to the csgo/ directory)")]
@@ -543,7 +542,9 @@ namespace MatchZy
 
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
-            // --- 修改處：如果比賽尚未正式開始 (熱身期間)，允許玩家自由選擇隊伍 ---
+            // --- 關鍵修改點 ---
+            // 如果比賽尚未正式開始 (Live)，不論是否有 JSON 配置，都允許玩家待在他們選擇的隊伍
+            // 這樣玩家才能在熱身期間自由換隊以確認隊伍名稱
             if (!isMatchLive)
             {
                 return (CsTeam)player.TeamNum;
