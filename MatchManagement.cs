@@ -394,40 +394,29 @@ namespace MatchZy
             return true;
         }
 
-        // --- 修正處 4：根源修正 SetMapSides，防止它在比賽中途重置隊伍 ---
+        // --- 修正處 4：【終極修正】SetMapSides 暴力防護 ---
+        // 只要比賽已經開始 (matchStarted)，絕對不要讀取 JSON 重置隊伍，直接保留現狀！
+        // 這解決了 .switch 後因為 JSON 是 "knife" 而導致的重置問題
         public void SetMapSides() {
+            // [新增防護] 比賽開始後，不準動隊伍分配！
+            if (matchStarted) 
+            {
+                Log($"[SetMapSides] Match is LIVE. Skipping reset to preserve current side switch.");
+                ForceRefreshTeamNames();
+                return;
+            }
+
             int mapNumber = matchConfig.CurrentMapNumber;
             
             if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
 
             string sideSetting = matchConfig.MapSides[mapNumber];
-            Log($"[SetMapSides] Map index: {mapNumber}, Setting: {sideSetting}, MatchStarted: {matchStarted}");
-
-            // [新增] 備份當前的隊伍狀態
-            // 如果比賽已經開始且設定是 knife，我們可能需要這份備份來防止重置
-            Team? currentCT = null;
-            Team? currentT = null;
-            if (reverseTeamSides.ContainsKey("CT")) currentCT = reverseTeamSides["CT"];
-            if (reverseTeamSides.ContainsKey("TERRORIST")) currentT = reverseTeamSides["TERRORIST"];
+            Log($"[SetMapSides] Map index: {mapNumber}, Setting: {sideSetting}");
 
             teamSides.Clear();
             reverseTeamSides.Clear();
 
-            // 判斷是否為「假 Knife」狀態（設定檔寫 knife，但比賽其實已經開始了）
-            // 如果是這種情況，我們要維持現狀，而不是重置
-            bool preserveState = (sideSetting == "knife" && matchStarted && currentCT != null && currentT != null);
-
-            if (preserveState)
-            {
-                // [核心修正] 維持現狀，不讓它重置回 Team1=CT
-                Log($"[SetMapSides] Match is LIVE. Ignoring 'knife' config and preserving current team sides.");
-                teamSides[currentCT!] = "CT";
-                teamSides[currentT!] = "TERRORIST";
-                reverseTeamSides["CT"] = currentCT!;
-                reverseTeamSides["TERRORIST"] = currentT!;
-                // 注意：這裡不設 isKnifeRequired = true，因為比賽已經開始了
-            }
-            else if (sideSetting == "team1_ct" || sideSetting == "team2_t")
+            if (sideSetting == "team1_ct" || sideSetting == "team2_t")
             {
                 teamSides[matchzyTeam1] = "CT";
                 teamSides[matchzyTeam2] = "TERRORIST";
@@ -445,7 +434,6 @@ namespace MatchZy
             }
             else if (sideSetting == "knife")
             {
-                // 這是真正的刀局初始化（比賽還沒開始）
                 isKnifeRequired = true;
                 teamSides[matchzyTeam1] = "CT";
                 teamSides[matchzyTeam2] = "TERRORIST";
@@ -465,12 +453,9 @@ namespace MatchZy
             UpdatePlayersMap();
         }
 
-        // --- 修正處 2：還原為官方 SetTeamNames 邏輯，解決隊名跳來跳去的問題 ---
+        // --- 修正處 2：還原為官方 SetTeamNames 邏輯 (Team1固定變數1)，解決換邊隊名亂跳 ---
         public void SetTeamNames()
         {
-            // CS2 引擎機制：mp_teamname_1 對應 Team1，mp_teamname_2 對應 Team2
-            // 換邊時，CS2 會自動交換名字顯示的位置。
-            // 因此我們不應該動態修改 Cvar，而應該固定對應關係。
             string t1Name = matchzyTeam1.teamName;
             string t2Name = matchzyTeam2.teamName;
 
@@ -482,14 +467,14 @@ namespace MatchZy
             Server.ExecuteCommand($"mp_teamname_1 \"{t1Name}\"");
             Server.ExecuteCommand($"mp_teamname_2 \"{t2Name}\"");
 
-            // 同步更新 ConVar 物件
+            // 同步更新 ConVar
             var cvar1 = ConVar.Find("mp_teamname_1");
             var cvar2 = ConVar.Find("mp_teamname_2");
             cvar1?.SetValue(t1Name);
             cvar2?.SetValue(t2Name);
         }
 
-        // 透過多次計時器強制鎖定，解決 CS2 Going Live 瞬間的延遲回滾
+        // 透過多次計時器強制鎖定
         public void ForceRefreshTeamNames()
         {
             SetTeamNames();
@@ -595,11 +580,11 @@ namespace MatchZy
             ForceRefreshTeamNames();
         }
 
-        // --- 修正處 3：換邊處理，正確更新邏輯與設定檔，但不碰 Cvar 名稱 ---
+        // --- 修正處 3：SwapSides 保留對設定檔的修改，以備不時之需 ---
         public void SwapSidesInTeamData(bool swapTeams) {
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
-            // 1. 交換 MatchZy 內部的隊伍邏輯 (這是為了統計數據正確)
+            // 1. 交換 MatchZy 內部的隊伍邏輯
             var teamCtObj = reverseTeamSides["CT"];
             var teamTObj = reverseTeamSides["TERRORIST"];
 
@@ -609,8 +594,7 @@ namespace MatchZy
             teamSides[teamTObj] = "CT";
             teamSides[teamCtObj] = "TERRORIST";
 
-            // 2. [關鍵] 覆蓋 JSON 設定檔中的 "knife" 設定
-            // 這是為了防止 SetMapSides 被呼叫時把邏輯重置回預設值
+            // 2. 更新設定檔 (雙重保險，雖然 SetMapSides 已經有防護了，但這裡改了更安心)
             if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count)
             {
                 string newSideSetting = "";
@@ -625,7 +609,6 @@ namespace MatchZy
 
             Log($"[MatchZy] Swapped Sides logic. New CT Logical Team: {reverseTeamSides["CT"].teamName}");
             
-            // 3. 刷新名字 (現在 SetTeamNames 是正確的官方邏輯，會讓 CS2 自動處理顯示)
             SetTeamNames();
             ForceRefreshTeamNames();
         }
