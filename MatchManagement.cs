@@ -394,18 +394,40 @@ namespace MatchZy
             return true;
         }
 
+        // --- 修正處 4：根源修正 SetMapSides，防止它在比賽中途重置隊伍 ---
         public void SetMapSides() {
             int mapNumber = matchConfig.CurrentMapNumber;
             
             if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
 
             string sideSetting = matchConfig.MapSides[mapNumber];
-            Log($"[SetMapSides] Map index: {mapNumber}, Setting: {sideSetting}");
+            Log($"[SetMapSides] Map index: {mapNumber}, Setting: {sideSetting}, MatchStarted: {matchStarted}");
+
+            // [新增] 備份當前的隊伍狀態
+            // 如果比賽已經開始且設定是 knife，我們可能需要這份備份來防止重置
+            Team? currentCT = null;
+            Team? currentT = null;
+            if (reverseTeamSides.ContainsKey("CT")) currentCT = reverseTeamSides["CT"];
+            if (reverseTeamSides.ContainsKey("TERRORIST")) currentT = reverseTeamSides["TERRORIST"];
 
             teamSides.Clear();
             reverseTeamSides.Clear();
 
-            if (sideSetting == "team1_ct" || sideSetting == "team2_t")
+            // 判斷是否為「假 Knife」狀態（設定檔寫 knife，但比賽其實已經開始了）
+            // 如果是這種情況，我們要維持現狀，而不是重置
+            bool preserveState = (sideSetting == "knife" && matchStarted && currentCT != null && currentT != null);
+
+            if (preserveState)
+            {
+                // [核心修正] 維持現狀，不讓它重置回 Team1=CT
+                Log($"[SetMapSides] Match is LIVE. Ignoring 'knife' config and preserving current team sides.");
+                teamSides[currentCT!] = "CT";
+                teamSides[currentT!] = "TERRORIST";
+                reverseTeamSides["CT"] = currentCT!;
+                reverseTeamSides["TERRORIST"] = currentT!;
+                // 注意：這裡不設 isKnifeRequired = true，因為比賽已經開始了
+            }
+            else if (sideSetting == "team1_ct" || sideSetting == "team2_t")
             {
                 teamSides[matchzyTeam1] = "CT";
                 teamSides[matchzyTeam2] = "TERRORIST";
@@ -423,7 +445,16 @@ namespace MatchZy
             }
             else if (sideSetting == "knife")
             {
+                // 這是真正的刀局初始化（比賽還沒開始）
                 isKnifeRequired = true;
+                teamSides[matchzyTeam1] = "CT";
+                teamSides[matchzyTeam2] = "TERRORIST";
+                reverseTeamSides["CT"] = matchzyTeam1;
+                reverseTeamSides["TERRORIST"] = matchzyTeam2;
+            }
+            // 隨機或其他模式
+            else 
+            {
                 teamSides[matchzyTeam1] = "CT";
                 teamSides[matchzyTeam2] = "TERRORIST";
                 reverseTeamSides["CT"] = matchzyTeam1;
