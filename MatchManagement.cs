@@ -567,27 +567,26 @@ namespace MatchZy
 
 // --- 修正處 3：換邊處理，徹底反轉字典中的物件指向，解決下一回合跳回來的問題 ---
         public void SwapSidesInTeamData(bool swapTeams) {
+            // 安全檢查：確保字典裡有 CT 和 T
             if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
 
-            // 1. 獲取當前隊伍物件
+            // 1. 執行隊伍物件交換 (這是記憶體中的交換)
             var teamCtObj = reverseTeamSides["CT"];
             var teamTObj = reverseTeamSides["TERRORIST"];
 
-            // 2. 徹底反轉字典指標：原本是 CT 的物件現在指向 T，原本是 T 的指向 CT
             reverseTeamSides["CT"] = teamTObj;
             reverseTeamSides["TERRORIST"] = teamCtObj;
 
             teamSides[teamTObj] = "CT";
             teamSides[teamCtObj] = "TERRORIST";
 
-            // 3. [核心修正] 強制根據當前狀態更新 MatchConfig
-            // 不管原本是 "knife" 還是 "team1_ct"，直接寫入現在誰當 CT
-            // 這能確保下一回合系統讀取設定時，讀到的是我們交換後的結果，而不是舊的 "knife" 設定
+            // 2. [關鍵修正] 將結果寫死到 MatchConfig 的 MapSides 中
+            // 這樣當 SetMapSides() 在下一回合被呼叫時，它會讀到新的設定，而不是舊的 "knife"
             if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count)
             {
                 string newSideSetting = "";
                 
-                // 檢查現在誰是 CT
+                // 判斷現在誰變成了 CT
                 if (reverseTeamSides["CT"] == matchzyTeam1)
                 {
                     newSideSetting = "team1_ct";
@@ -597,17 +596,37 @@ namespace MatchZy
                     newSideSetting = "team2_ct";
                 }
 
-                // 如果成功判斷出新的設定，就覆蓋掉 MapSides (包含覆蓋掉 "knife")
+                // 如果成功判斷，就覆蓋掉原本的設定 (無論原本是 "knife" 還是別的)
                 if (!string.IsNullOrEmpty(newSideSetting))
                 {
                     string oldSide = matchConfig.MapSides[matchConfig.CurrentMapNumber];
                     matchConfig.MapSides[matchConfig.CurrentMapNumber] = newSideSetting;
-                    Log($"[MatchZy] SwapSidesInTeamData: Updated MapSides[{matchConfig.CurrentMapNumber}] from '{oldSide}' to '{newSideSetting}'");
+                    
+                    // 記錄日誌以便除錯
+                    Log($"[MatchZy] SwapSidesInTeamData: Config updated. Map {matchConfig.CurrentMapNumber} changed from '{oldSide}' to '{newSideSetting}'");
                 }
             }
 
-            Log($"[MatchZy] Swapped Sides successfully. New CT: {reverseTeamSides["CT"].teamName}");
+            // 3. [雙重保險] 更新 Cvar 緩存
+            // 這是為了防止系統讀取 ChangedCvars 重置隊名
+            string newCtName = reverseTeamSides["CT"].teamName;
+            string newTName = reverseTeamSides["TERRORIST"].teamName;
+
+            if (matchConfig.ChangedCvars != null)
+            {
+                matchConfig.ChangedCvars["mp_teamname_1"] = newCtName;
+                matchConfig.ChangedCvars["mp_teamname_2"] = newTName;
+            }
+            if (matchConfig.OriginalCvars != null)
+            {
+                matchConfig.OriginalCvars["mp_teamname_1"] = newCtName;
+                matchConfig.OriginalCvars["mp_teamname_2"] = newTName;
+            }
+
+            Log($"[MatchZy] Swapped Sides successfully. New CT: {newCtName}");
             
+            // 4. 立即刷新隊名顯示
+            SetTeamNames();
             ForceRefreshTeamNames();
         }
         private CsTeam GetPlayerTeam(CCSPlayerController player)
