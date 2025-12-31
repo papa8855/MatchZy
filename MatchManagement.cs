@@ -7,10 +7,8 @@ using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Utils;
 using Newtonsoft.Json.Linq;
 
-
 namespace MatchZy
 {
-
     public partial class MatchZy
     {
         public MatchConfig matchConfig = new();
@@ -51,7 +49,6 @@ namespace MatchZy
                 if (player != null) return;
                 if (isMatchSetup)
                 {
-                    // command.ReplyToCommand($"[LoadMatch] A match is already setup with id: {liveMatchId}, cannot load a new match!");
                     ReplyToUserCommand(player, Localizer["matchzy.mm.matchisalreadysetup", liveMatchId]);
                     Log($"[LoadMatch] A match is already setup with id: {liveMatchId}, cannot load a new match!");
                     return;
@@ -60,7 +57,6 @@ namespace MatchZy
                 string filePath = Path.Join(Server.GameDirectory + "/csgo", fileName);
                 if (!File.Exists(filePath)) 
                 {
-                    // command.ReplyToCommand($"[LoadMatch] Provided file does not exist! Usage: matchzy_loadmatch <filename>");
                     ReplyToUserCommand(player, Localizer["matchzy.mm.filedoesntexist"]);
                     Log($"[LoadMatch] Provided file does not exist! Usage: matchzy_loadmatch <filename>");
                     return;
@@ -69,7 +65,6 @@ namespace MatchZy
                 bool success = LoadMatchFromJSON(jsonData);
                 if (!success)
                 {
-                    // command.ReplyToCommand("Match load failed! Resetting current match");
                     ReplyToUserCommand(player, Localizer["matchzy.mm.matchloadfailed"]);
                     ResetMatch();
                 }
@@ -89,7 +84,6 @@ namespace MatchZy
             if (player != null) return;
             if (isMatchSetup)
             {
-                // command.ReplyToCommand($"[LoadMatchDataCommand] A match is already setup with id: {liveMatchId}, cannot load a new match!");
                 ReplyToUserCommand(player, Localizer["matchzy.mm.get5matchisalreadysetup", liveMatchId]);
                 Log($"[LoadMatchDataCommand] A match is already setup with id: {liveMatchId}, cannot load a new match!");
                 return;
@@ -103,7 +97,6 @@ namespace MatchZy
 
             if (!IsValidUrl(url))
             {
-                // command.ReplyToCommand($"[LoadMatchDataCommand] Invalid URL: {url}. Please provide a valid URL to load the match!");
                 ReplyToUserCommand(player, Localizer["matchzy.mm.invalidurl", url]);
                 Log($"[LoadMatchDataCommand] Invalid URL: {url}. Please provide a valid URL to load the match!");
                 return;
@@ -125,7 +118,6 @@ namespace MatchZy
                     bool success = LoadMatchFromJSON(jsonData);
                     if (!success)
                     {
-                        // command.ReplyToCommand("Match load failed! Resetting current match");
                         ReplyToUserCommand(player, Localizer["matchzy.mm.matchloadfailed"]);
                         ResetMatch();
                     }
@@ -133,7 +125,6 @@ namespace MatchZy
                 }
                 else
                 {
-                    // command.ReplyToCommand($"[LoadMatchFromURL] HTTP request failed with status code: {response.StatusCode}");
                     ReplyToUserCommand(player, Localizer["matchzy.mm.httprequestfailed", response.StatusCode]);
                     Log($"[LoadMatchFromURL] HTTP request failed with status code: {response.StatusCode}");
                 }
@@ -149,7 +140,6 @@ namespace MatchZy
         {
             string[] requiredFields = { "maplist", "team1", "team2", "num_maps" };
 
-            // Check if any required field is missing
             foreach (string field in requiredFields)
             {
                 if (jsonData[field] == null)
@@ -169,17 +159,14 @@ namespace MatchZy
                     case "min_players_to_ready":
                     case "min_spectators_to_ready":
                     case "num_maps":
-                        int numMaps;
-                        if (!int.TryParse(jsonData[field]!.ToString(), out numMaps))
+                        if (!int.TryParse(jsonData[field]!.ToString(), out int numMaps))
                         {
                             return $"{field} should be an integer!";
-                            
                         }
                         if (field == "num_maps" && numMaps > jsonData["maplist"]!.ToObject<List<string>>()!.Count)
                         {
                             return $"{field} should be equal to or greater than maplist!";
                         }
-                        
                         break;
                     
                     case "cvars":
@@ -218,8 +205,8 @@ namespace MatchZy
                         {
                             return $"{field} should contain atleast 1 map!";
                         }
-
                         break;
+
                     case "map_sides":
                         if (jsonData[field]!.Type != JTokenType.Array)
                         {
@@ -229,7 +216,7 @@ namespace MatchZy
                         bool allElementsValid = jsonData[field]!.All(element => allowedValues.Contains(element.ToString()));
 
                         if (!allElementsValid) {
-                            return $"{field} should be \"team1_ct\", \"team1_t\", or \"knife\"!";
+                            return $"{field} should be \"team1_ct\", \"team1_t\", \"team2_ct\", \"team2_t\", or \"knife\"!";
                         }
                         
                         if (jsonData[field]!.ToObject<List<string>>()!.Count < jsonData["num_maps"]!.Value<int>()) {
@@ -240,7 +227,7 @@ namespace MatchZy
                     case "skip_veto":
                     case "clinch_series":
                     case "wingman":
-                        if (!bool.TryParse(jsonData[field]!.ToString(), out bool result))
+                        if (!bool.TryParse(jsonData[field]!.ToString(), out bool _))
                         {
                             return $"{field} should be a boolean!";
                         }
@@ -253,9 +240,7 @@ namespace MatchZy
 
         public bool LoadMatchFromJSON(string jsonData)
         {
-            
             JObject jsonDataObject = JObject.Parse(jsonData);
-
             string validationError = ValidateMatchJsonStructure(jsonDataObject);
 
             if (validationError != "")
@@ -316,19 +301,14 @@ namespace MatchZy
 
             GetCvarValues(jsonDataObject);
 
-            Log($"[LOADMATCH] MinPlayersToReady: {matchConfig.MinPlayersToReady} SeriesClinch: {matchConfig.SeriesCanClinch}");
-            Log($"[LOADMATCH] MapsPool: {string.Join(", ", matchConfig.MapsPool)} MapsLeftInVetoPool: {string.Join(", ", matchConfig.MapsLeftInVetoPool)}");
-
             LoadClientNames();
 
             if (matchConfig.SkipVeto)
             {
-                // Copy the first k maps from the maplist to the final match maps.
                 for (int i = 0; i < matchConfig.NumMaps; i++) 
                 {
                     matchConfig.Maplist.Add(matchConfig.MapsPool[i]);
 
-                    // Push a map side if one hasn't been set yet.
                     if (matchConfig.MapSides.Count < matchConfig.Maplist.Count) {
                         if (matchConfig.MatchSideType == "standard" || matchConfig.MatchSideType == "always_knife") {
                             matchConfig.MapSides.Add("knife");
@@ -354,12 +334,8 @@ namespace MatchZy
             } 
 
             readyAvailable = true;
-
-            // This is done before starting warmup so that cvars like get5_remote_log_url are set properly to send the events
             ExecuteChangedConvars();
-
             StartWarmup();
-
             isMatchSetup = true;
 
             if(matchConfig.SkipVeto) SetMapSides();
@@ -386,34 +362,59 @@ namespace MatchZy
 
         public void SetMapSides() {
             int mapNumber = matchConfig.CurrentMapNumber;
-            if (matchConfig.MapSides[mapNumber] == "team1_ct" || matchConfig.MapSides[mapNumber] == "team2_t")
+            
+            // 安全檢查：確保索引未越界
+            if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
+
+            string sideSetting = matchConfig.MapSides[mapNumber];
+            Log($"[SetMapSides] Map index: {mapNumber}, Setting: {sideSetting}");
+
+            // 清除舊的邊界分配，重新初始化
+            teamSides.Clear();
+            reverseTeamSides.Clear();
+
+            if (sideSetting == "team1_ct" || sideSetting == "team2_t")
             {
+                // Team1 為 CT，Team2 為 T
                 teamSides[matchzyTeam1] = "CT";
                 teamSides[matchzyTeam2] = "TERRORIST";
                 reverseTeamSides["CT"] = matchzyTeam1;
                 reverseTeamSides["TERRORIST"] = matchzyTeam2;
                 isKnifeRequired = false;
             }
-            else if (matchConfig.MapSides[mapNumber] == "team2_ct" || matchConfig.MapSides[mapNumber] == "team1_t")
+            else if (sideSetting == "team2_ct" || sideSetting == "team1_t")
             {
+                // Team2 為 CT，Team1 為 T
                 teamSides[matchzyTeam2] = "CT";
                 teamSides[matchzyTeam1] = "TERRORIST";
                 reverseTeamSides["CT"] = matchzyTeam2;
                 reverseTeamSides["TERRORIST"] = matchzyTeam1;
                 isKnifeRequired = false;
             }
-            else if (matchConfig.MapSides[mapNumber] == "knife")
+            else if (sideSetting == "knife")
             {
                 isKnifeRequired = true;
+                // 刀局模式預設分配
+                teamSides[matchzyTeam1] = "CT";
+                teamSides[matchzyTeam2] = "TERRORIST";
+                reverseTeamSides["CT"] = matchzyTeam1;
+                reverseTeamSides["TERRORIST"] = matchzyTeam2;
             }
 
+            // 更新伺服器隊伍名稱並同步所有玩家
             SetTeamNames();
+            UpdatePlayersMap();
+            Log($"[SetMapSides] Side Assignment complete: CT: {reverseTeamSides["CT"].teamName}, T: {reverseTeamSides["TERRORIST"].teamName}");
         }
 
         public void SetTeamNames()
         {
-            Server.ExecuteCommand($"mp_teamname_1 {reverseTeamSides["CT"].teamName}");
-            Server.ExecuteCommand($"mp_teamname_2 {reverseTeamSides["TERRORIST"].teamName}");
+            if (reverseTeamSides.ContainsKey("CT") && reverseTeamSides.ContainsKey("TERRORIST"))
+            {
+                // 加上引號以處理名稱中的空格
+                Server.ExecuteCommand($"mp_teamname_1 \"{reverseTeamSides["CT"].teamName}\"");
+                Server.ExecuteCommand($"mp_teamname_2 \"{reverseTeamSides["TERRORIST"].teamName}\"");
+            }
         }
 
         public void GetCvarValues(JObject jsonDataObject)
@@ -465,7 +466,6 @@ namespace MatchZy
                 matchConfig.Spectators = jsonDataObject["spectators"]!["players"]!;
                 if (matchConfig.Spectators is JArray spectatorsArray && spectatorsArray.Count == 0)
                 {
-                    // Convert the empty JArray to an empty JObject
                     matchConfig.Spectators = new JObject();
                 }
             }
@@ -485,7 +485,6 @@ namespace MatchZy
             {
                 matchConfig.MapBanOrder = jsonDataObject["veto_mode"]!.ToObject<List<string>>()!;
             }
-            
         }
 
         public void HandleTeamNameChangeCommand(CCSPlayerController? player, string teamName, int teamNum) {
@@ -494,13 +493,11 @@ namespace MatchZy
                 return;
             }
             if (matchStarted) {
-                // ReplyToUserCommand(player, "Team names cannot be changed once the match is started!");
                 ReplyToUserCommand(player, Localizer["matchzy.mm.teamcannotbechanged"]);
                 return;
             }
             teamName = RemoveSpecialCharacters(teamName.Trim());
             if (teamName == "") {
-                // ReplyToUserCommand(player, $"Usage: !team{teamNum} <name>");
                 ReplyToUserCommand(player, Localizer["matchzy.cc.usage", $"!team{teamNum} <name>"]);
             }
 
@@ -508,25 +505,16 @@ namespace MatchZy
                 matchzyTeam1.teamName = teamName;
                 teamSides[matchzyTeam1] = "CT";
                 reverseTeamSides["CT"] = matchzyTeam1;
-                foreach (var coach in matchzyTeam1.coach)
-                {
-                    coach.Clan = $"[{matchzyTeam1.teamName} COACH]";
-                }
             } else if (teamNum == 2) {
                 matchzyTeam2.teamName = teamName;
                 teamSides[matchzyTeam2] = "TERRORIST";
                 reverseTeamSides["TERRORIST"] = matchzyTeam2;
-                foreach (var coach in matchzyTeam2.coach)
-                {
-                    coach.Clan = $"[{matchzyTeam2.teamName} COACH]";
-                }
             }
-            Server.ExecuteCommand($"mp_teamname_{teamNum} {teamName};");
+            Server.ExecuteCommand($"mp_teamname_{teamNum} \"{teamName}\"");
         }
 
         public void SwapSidesInTeamData(bool swapTeams) {
             if (swapTeams) {
-                // Here, we sync matchzyTeam1 and matchzyTeam2 with the actual team1 and team2
                 (matchzyTeam2, matchzyTeam1) = (matchzyTeam1, matchzyTeam2);
             }
 
@@ -538,21 +526,18 @@ namespace MatchZy
         {
             var steamId = player.SteamID.ToString();
 
-            // 1. 如果有名單，優先按照名單分配
             if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
             {
-                return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam1).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
+                return teamSides.ContainsKey(matchzyTeam1) && teamSides[matchzyTeam1] == "CT" ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
             }
             if (matchzyTeam2.teamPlayers != null && matchzyTeam2.teamPlayers[steamId] != null)
             {
-                return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam2).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
+                return teamSides.ContainsKey(matchzyTeam2) && teamSides[matchzyTeam2] == "CT" ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
             }
 
-            // 2. 完全沒名單時，讓系統回傳玩家當前所在的陣營 (CsTeam)player.TeamNum
             if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
                 (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
             {
-                // 當前沒有任何 whitelist 限制，直接信任玩家所在的隊伍
                 return (CsTeam)player.TeamNum;
             }
             return isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
@@ -573,7 +558,6 @@ namespace MatchZy
 
             string winnerTeam = "none";
             
-            // 修正勝隊判定：比對名稱而不是只看分數 (因為隊伍物件可能互換了)
             if (winnerName != null) 
             {
                 if (matchzyTeam1.teamName == winnerName) winnerTeam = "team1";
@@ -596,7 +580,6 @@ namespace MatchZy
 
             Task.Run(async () => {
                 await database.SetMatchEndData(matchId, winnerName ?? "Draw", team1Score, team2Score);
-                // Making sure that map end event is fired first
                 await Task.Delay(2000);
                 await SendEventAsync(seriesResultEvent);
             });
@@ -621,6 +604,5 @@ namespace MatchZy
                 Server.ExecuteCommand($"mp_overtime_enable {overtimeEnabled ?? "1"}");
             }
         }
-
     }
 }
