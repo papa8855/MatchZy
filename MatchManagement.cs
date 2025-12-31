@@ -24,10 +24,10 @@ namespace MatchZy
         public string loadedConfigFile = "";
 
         public Team matchzyTeam1 = new() {
-            teamName = "COUNTER-TERRORISTS"
+            teamName = "Team1"
         };
         public Team matchzyTeam2 = new() {
-            teamName = "TERRORISTS"
+            teamName = "Team2"
         };
 
         public Dictionary<Team, string> teamSides = new();
@@ -534,11 +534,11 @@ namespace MatchZy
             (reverseTeamSides["CT"], reverseTeamSides["TERRORIST"]) = (reverseTeamSides["TERRORIST"], reverseTeamSides["CT"]);
         }
 
-  private CsTeam GetPlayerTeam(CCSPlayerController player)
+private CsTeam GetPlayerTeam(CCSPlayerController player)
 {
     var steamId = player.SteamID.ToString();
 
-    // 1. 如果有名單，優先按照名單分配（保留原本功能）
+    // 1. 如果有名單，優先按照名單分配
     if (matchzyTeam1.teamPlayers != null && matchzyTeam1.teamPlayers[steamId] != null)
     {
         return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam1).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
@@ -548,21 +548,16 @@ namespace MatchZy
         return teamSides.FirstOrDefault(x => x.Value == "CT" && x.Key == matchzyTeam2).Key != null ? CsTeam.CounterTerrorist : CsTeam.Terrorist;
     }
 
-    // 2. 【核心修正】完全沒名單時的處理邏輯
+    // 2. 完全沒名單時（你的情況），讓系統根據陣營反查 Team1 或 Team2
     if ((matchzyTeam1.teamPlayers == null || !matchzyTeam1.teamPlayers.HasValues) &&
         (matchzyTeam2.teamPlayers == null || !matchzyTeam2.teamPlayers.HasValues))
     {
-        // 抓取玩家當前陣營 (2=T, 3=CT)
         CsTeam currentSide = (CsTeam)player.TeamNum;
-
-        // 這裡不再死板回傳 player.TeamNum，而是去反查 teamSides 字典
-        // 確保不論換幾次地圖、換幾次邊，贏球的陣營都能對應到正確的 Team1 或 Team2
         if (reverseTeamSides.ContainsKey("CT") || reverseTeamSides.ContainsKey("TERRORIST"))
         {
-            return currentSide;
+            return currentSide; 
         }
     }
-
     return isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
 }
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
