@@ -131,27 +131,48 @@ public partial class MatchZy
     {
         try
         {
-            HandleMatchEnd();
-            // ResetMatch();
+            if (!isMatchLive) return HookResult.Continue;
+
+            // 1. 取得當前伺服器內的分數與 CT 隊伍名稱
+            int ctScore = 0;
+            int tScore = 0;
+            string currentCtName = "";
+            var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+            foreach (var team in teams) {
+                if (team.TeamNum == 3) { // CT 陣營
+                    ctScore = team.Score; 
+                    currentCtName = team.Teamname; 
+                }
+                if (team.TeamNum == 2) tScore = team.Score; // T 陣營
+            }
+
+            // 2. 核心修正：將分數「精確對位」到 matchzyTeam1 和 matchzyTeam2
+            int finalS1, finalS2;
+            if (currentCtName == matchzyTeam1.teamName) {
+                // 如果當前 CT 是 Team1，則 S1 是 CT 分數，S2 是 T 分數
+                finalS1 = ctScore; 
+                finalS2 = tScore;
+            } else {
+                // 如果當前 CT 是 Team2，則 S1 是 T 分數（因為 Team1 在 T 陣營），S2 是 CT 分數
+                finalS1 = tScore; 
+                finalS2 = ctScore;
+            }
+
+            // 3. 根據歸位後的分數判斷誰是贏家名稱
+            string winnerName = (finalS1 > finalS2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+
+            // 4. 直接呼叫 EndSeries，這會發出正確的第一則廣播並處理換圖邏輯
+            // 參數順序必須是：(贏家名, 延遲秒數, Team1正確分數, Team2正確分數)
+            EndSeries(winnerName, 10, finalS1, finalS2);
+
+            // 5. 將比賽狀態設為結束，確保換圖流程不被阻擋
+            isMatchLive = false;
+
             return HookResult.Continue;
         }
         catch (Exception e)
         {
             Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-    }
-
-    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
-    {
-        try
-        {
-            HandlePostRoundStartEvent(@event);
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventRoundStart FATAL] An error occurred: {e.Message}");
             return HookResult.Continue;
         }
     }
