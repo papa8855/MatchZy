@@ -133,28 +133,28 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // --- 方案：直接從遊戲引擎的 TeamManager 抓取分數，避開變數命名問題 ---
-        int t1Score = 0;
-        int t2Score = 0;
-
+        // 1. 抓取物理分數
+        int ctScore = 0;
+        int tScore = 0;
         var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-        foreach (var team in teams)
-        {
-            if (team.TeamNum == 3) t1Score = team.Score; // CT 分數
-            if (team.TeamNum == 2) t2Score = team.Score; // T 分數
+        foreach (var team in teams) {
+            if (team.TeamNum == 3) ctScore = team.Score; 
+            if (team.TeamNum == 2) tScore = team.Score;
         }
 
-        // 根據分數判定誰是贏家名字 (這裡對應 MatchManagement.cs 裡的 matchzyTeam1/2)
+        // 2. 核心：根據 matchzyTeam1 目前所在的陣營來決定誰贏
         string winnerName = "";
-        if (t1Score > t2Score) {
-            winnerName = matchzyTeam1.teamName;
-        } else if (t2Score > t1Score) {
-            winnerName = matchzyTeam2.teamName;
+        if (matchzyTeam1.teamSide == CsTeam.CounterTerrorist) {
+            // 如果 Team1 目前在 CT
+            winnerName = (ctScore > tScore) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+        } else {
+            // 如果 Team1 目前在 T (說明換過邊了)
+            winnerName = (tScore > ctScore) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
         }
 
-        // 呼叫你在 MatchManagement.cs 修改過的 EndSeries
-        // 這會觸發加分、數據庫紀錄、訊息廣播與變數歸位
-        EndSeries(winnerName, 10, t1Score, t2Score);
+        // 3. 重要：我們不再呼叫 HandleMatchEnd()，因為它會弄亂名字
+        // 我們直接呼叫 EndSeries，並傳入我們「親手判定」的正確贏家名字
+        EndSeries(winnerName, 10, ctScore, tScore);
 
         return HookResult.Continue;
     }
