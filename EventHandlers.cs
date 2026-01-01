@@ -128,50 +128,50 @@ public partial class MatchZy
     }
 
  public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
-{
-    try
     {
-        if (!isMatchLive) return HookResult.Continue;
+        try
+        {
+            if (!isMatchLive) return HookResult.Continue;
 
-        // 1. 直接用官方 API 抓取 CT 和 T 的實體分數
-        int ctScore = 0;
-        int tScore = 0;
-        var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-        foreach (var team in teams) {
-            if (team.TeamNum == 3) ctScore = team.Score; // 3 是 CT
-            if (team.TeamNum == 2) tScore = team.Score; // 2 是 T
+            // 1. 直接從遊戲引擎抓取物理上的分數（CT與T）
+            int ctScore = 0;
+            int tScore = 0;
+            var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+            foreach (var team in teams) {
+                if (team.TeamNum == 3) ctScore = team.Score; 
+                if (team.TeamNum == 2) tScore = team.Score;
+            }
+
+            // 2. 使用 MatchZy 核心函數 GetTeamSide 來判定 Team1 在哪一邊
+            // 這個函數在 MatchZy 主類別中一定有定義，不會報錯
+            CsTeam team1Side = GetTeamSide(1);
+
+            int t1Score = 0;
+            int t2Score = 0;
+
+            if (team1Side == CsTeam.CounterTerrorist) {
+                t1Score = ctScore;
+                t2Score = tScore;
+            } else {
+                t1Score = tScore;
+                t2Score = ctScore;
+            }
+
+            // 3. 判定贏家名字
+            string winnerName = (t1Score > t2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+
+            // 4. 呼叫你在 MatchManagement.cs 寫好的校正版 EndSeries
+            // 這會解決地圖結束顯示錯誤，並觸發「變數反轉歸位」邏輯
+            EndSeries(winnerName, 10, t1Score, t2Score);
+
+            return HookResult.Continue;
         }
-
-        // 2. 判定邏輯：我們看 matchzyTeam1 目前在什麼位置 (TeamSide)
-        // 既然不能用函數，我們直接比對 matchzyTeam1.teamSide
-        int t1Score = 0;
-        int t2Score = 0;
-
-        // 這裡 matchzyTeam1.teamSide 是 CsTeam 型別
-        if (matchzyTeam1.teamSide == CsTeam.CounterTerrorist) {
-            t1Score = ctScore;
-            t2Score = tScore;
-        } else {
-            t1Score = tScore;
-            t2Score = ctScore;
+        catch (Exception e)
+        {
+            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
+            return HookResult.Continue;
         }
-
-        // 3. 判定贏家名字
-        string winnerName = (t1Score > t2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
-
-        // 4. 呼叫 EndSeries 並傳入正確的分數與名字
-        // 這會完美的與你 MatchManagement.cs 裡的 EndSeries 邏輯對接
-        EndSeries(winnerName, 10, t1Score, t2Score);
-
-        return HookResult.Continue;
     }
-    catch (Exception e)
-    {
-        Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
-        return HookResult.Continue;
-    }
-}
-
     public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
     {
         try
