@@ -607,39 +607,39 @@ public void SetMapSides() {
 
      public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // --- 核心修正：重新校正傳入的 winnerName ---
-    // 如果 t1score 比較高，代表目前的 matchzyTeam1 贏了
-    // 如果 t2score 比較高，代表目前的 matchzyTeam2 贏了
+    // --- 關鍵校正：無視傳入的 winnerName，根據分數重新抓取隊名 ---
+    // 因為您在 SwapSides 已經物理換過 matchzyTeam1，所以只要 t1score > t2score，贏家就是 matchzyTeam1
     if (t1score > t2score) {
         winnerName = matchzyTeam1.teamName;
     } else if (t2score > t1score) {
         winnerName = matchzyTeam2.teamName;
     }
 
-    // 1. 聊天室廣播
+    // 1. 聊天室廣播（使用校正後的名字）
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
     }
 
-    // 2. 判斷誰是原始隊伍，並在此時「加分」
+    // 2. 判定 Winner ID 與 大分加分
     string winnerId = "0";
     string winnerKey = "none";
 
-    if (winnerName != null) {
-        if (winnerName == originalTeam1?.teamName) {
-            matchzyTeam1.seriesScore++; 
+    if (winnerName != null && originalTeam1 != null) {
+        if (winnerName == originalTeam1.teamName) {
+            matchzyTeam1.seriesScore++; // 這裡必須手動加分，原本代碼漏掉了
             winnerId = "1";
             winnerKey = "team1";
-        } else if (winnerName == originalTeam2?.teamName) {
-            matchzyTeam2.seriesScore++; 
+        } else {
+            matchzyTeam2.seriesScore++; // 幫原始 Team2 加分
             winnerId = "2";
             winnerKey = "team2";
         }
     }
 
-    // 3. 鎖定目前的正確大分順序
+    // 3. 鎖定目前的正確大分順序（用於發送事件，不受後續歸位影響）
+    // eventScore1 永遠代表 originalTeam1 的分數
     int eventScore1 = (matchzyTeam1 == originalTeam1) ? matchzyTeam1.seriesScore : matchzyTeam2.seriesScore;
     int eventScore2 = (matchzyTeam1 == originalTeam1) ? matchzyTeam2.seriesScore : matchzyTeam1.seriesScore;
 
@@ -651,15 +651,14 @@ public void SetMapSides() {
         TimeUntilRestore = 10,
     };
 
-    // 4. 物理歸位：換圖前必須把變數換回來
+    // 4. 物理歸位：在換圖前必須把變數換回來
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
         Log("[MatchZy] 檢測到變數反轉，執行歸位。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
-    // 5. 發送資料庫與事件
+    // 5. 發送資料庫與事件 (使用校正後的數據)
     Task.Run(async () => {
-        // 使用修正後的 winnerName 寫入資料庫
         await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", eventScore1, eventScore2);
         await Task.Delay(2000);
         await SendEventAsync(seriesResultEvent);
