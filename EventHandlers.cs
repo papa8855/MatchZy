@@ -3,7 +3,6 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
 
 namespace MatchZy;
-
 public partial class MatchZy
 {
     public HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
@@ -11,7 +10,6 @@ public partial class MatchZy
         try
         {
             CCSPlayerController? player = @event.Userid;
-
             if (!IsPlayerValid(player)) return HookResult.Continue;
             Log($"[FULL CONNECT] Player ID: {player!.UserId}, Name: {player.PlayerName} has connected!");
 
@@ -71,9 +69,18 @@ public partial class MatchZy
             }
             playerData.Remove(userId);
 
-            if (matchzyTeam1.coach.Contains(player)) matchzyTeam1.coach.Remove(player);
-            else if (matchzyTeam2.coach.Contains(player)) matchzyTeam2.coach.Remove(player);
-
+            if (matchzyTeam1.coach.Contains(player))
+            {
+                matchzyTeam1.coach.Remove(player);
+                SetPlayerVisible(player);
+                player.Clan = "";
+            }
+            else if (matchzyTeam2.coach.Contains(player))
+            {
+                matchzyTeam2.coach.Remove(player);
+                SetPlayerVisible(player);
+                player.Clan = "";
+            }
             noFlashList.Remove(userId);
             lastGrenadesData.Remove(userId);
             nadeSpecificLastGrenadeData.Remove(userId);
@@ -87,36 +94,45 @@ public partial class MatchZy
         }
     }
 
+    public HookResult EventCsWinPanelRoundHandler(EventCsWinPanelRound @event, GameEventInfo info)
+    {
+        return HookResult.Continue;
+    }
+
+    // --- 核心修正處：解決地圖結束名字反轉 ---
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
     {
         try
         {
             if (!isMatchLive) return HookResult.Continue;
 
-            // 1. 抓取物理分數
+            // 1. 抓取物理分數與目前的 CT 隊名 (直接從引擎抓，不報錯)
             int ctScore = 0;
             int tScore = 0;
+            string currentCtName = "";
             var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
             foreach (var team in teams) {
-                if (team.TeamNum == 3) ctScore = team.Score; 
+                if (team.TeamNum == 3) {
+                    ctScore = team.Score; 
+                    currentCtName = team.Teamname; 
+                }
                 if (team.TeamNum == 2) tScore = team.Score;
             }
 
-            // 2. 判定贏家名字 (改用比對 TeamName 字串，不使用 teamSide 屬性)
-            string winnerName = "";
-            string currentCtTeamName = "";
-            foreach (var team in teams) {
-                if (team.TeamNum == 3) currentCtTeamName = team.Teamname;
-            }
-
-            if (ctScore > tScore) {
-                winnerName = (currentCtTeamName == matchzyTeam1.teamName) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+            // 2. 判定邏輯：如果引擎裡的 CT 名字等於我們存的 Team1 名字，代表 Team1 現在是 CT
+            int t1Score, t2Score;
+            if (currentCtName == matchzyTeam1.teamName) {
+                t1Score = ctScore;
+                t2Score = tScore;
             } else {
-                winnerName = (currentCtTeamName == matchzyTeam1.teamName) ? matchzyTeam2.teamName : matchzyTeam1.teamName;
+                t1Score = tScore;
+                t2Score = ctScore;
             }
 
-            // 3. 呼叫 MatchManagement.cs 裡的修正版 EndSeries
-            EndSeries(winnerName, 10, ctScore, tScore); 
+            string winnerName = (t1Score > t2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+
+            // 3. 呼叫 EndSeries 並傳入正確的分數對位
+            EndSeries(winnerName, 10, t1Score, t2Score);
 
             return HookResult.Continue;
         }
@@ -141,33 +157,6 @@ public partial class MatchZy
         }
     }
 
-    // 保留原本的 OnEntitySpawnedHandler 邏輯，避免遺失投擲物紀錄功能
-    public void OnEntitySpawnedHandler(CEntityInstance entity)
-    {
-        try
-        {
-            if (!isPractice || entity == null || entity.Entity == null) return;
-            if (!Constants.ProjectileTypeMap.ContainsKey(entity.Entity.DesignerName)) return;
-
-            Server.NextFrame(() => {
-                CBaseCSGrenadeProjectile projectile = new CBaseCSGrenadeProjectile(entity.Handle);
-                if (!projectile.IsValid || !projectile.Thrower.IsValid || projectile.Thrower.Value == null || projectile.Thrower.Value.Controller.Value == null) return;
-
-                CCSPlayerController player = new(projectile.Thrower.Value.Controller.Value.Handle);
-                if(!player.IsValid || player.PlayerPawn.Value == null) return;
-                int client = player.UserId!.Value;
-                
-                string nadeType = Constants.ProjectileTypeMap[entity.Entity.DesignerName];
-                if (!lastGrenadesData.ContainsKey(client)) lastGrenadesData[client] = new();
-                
-                // 這裡簡化紀錄邏輯以確保編譯，你可以視情況補回原本的詳細結構
-                lastGrenadeThrownTime[(int)projectile.Index] = DateTime.Now;
-            });
-        }
-        catch (Exception e) { Log($"[OnEntitySpawned FATAL] {e.Message}"); }
-    }
-
-    // ... 其餘你原本檔案內的函數 (EventPlayerConnectFullHandler 等) 請保留在下方 ...
     public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
     {
         try
@@ -178,7 +167,6 @@ public partial class MatchZy
             foreach (var coach in coaches)
             {
                 if (!IsPlayerValid(coach)) continue;
-                // If coaches are still left alive after freezetime ends, this code will force them to spectate their team again.
                 if (coach.PlayerPawn.Value?.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
 
                 Position coachPosition = new(coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsOrigin, coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsRotation);
@@ -206,7 +194,6 @@ public partial class MatchZy
             if (@event.Userid == null) return HookResult.Continue;
             var recv = @event.Userid;
 
-            // check if coach
             var coaches = reverseTeamSides["TERRORIST"].coach;
             if (coaches.Contains(recv)) {
                 TransferCoachBomb(recv);
@@ -227,12 +214,7 @@ public partial class MatchZy
             Server.NextFrame(() => {
                 CBaseCSGrenadeProjectile projectile = new CBaseCSGrenadeProjectile(entity.Handle);
 
-                if (!projectile.IsValid ||
-                    !projectile.Thrower.IsValid ||
-                    projectile.Thrower.Value == null ||
-                    projectile.Thrower.Value.Controller.Value == null ||
-                    projectile.Globalname == "custom"
-                ) return;
+                if (!projectile.IsValid || !projectile.Thrower.IsValid || projectile.Thrower.Value == null || projectile.Thrower.Value.Controller.Value == null || projectile.Globalname == "custom") return;
 
                 CCSPlayerController player = new(projectile.Thrower.Value.Controller.Value.Handle);
                 if(!player.IsValid || player.PlayerPawn.Value == null || !player.PlayerPawn.IsValid) return;
@@ -243,33 +225,15 @@ public partial class MatchZy
                 Vector velocity = new(projectile.AbsVelocity.X, projectile.AbsVelocity.Y, projectile.AbsVelocity.Z);
                 string nadeType = Constants.ProjectileTypeMap[entity.Entity.DesignerName];
 
-                if (!lastGrenadesData.ContainsKey(client)) {
-                    lastGrenadesData[client] = new();
-                }
+                if (!lastGrenadesData.ContainsKey(client)) lastGrenadesData[client] = new();
+                if (!nadeSpecificLastGrenadeData.ContainsKey(client)) nadeSpecificLastGrenadeData[client] = new(){};
 
-                if (!nadeSpecificLastGrenadeData.ContainsKey(client))
-                {
-                    nadeSpecificLastGrenadeData[client] = new(){};
-                }
-
-                GrenadeThrownData lastGrenadeThrown = new(
-                    position, 
-                    angle, 
-                    velocity, 
-                    player.PlayerPawn.Value.CBodyComponent!.SceneNode!.AbsOrigin, 
-                    player.PlayerPawn.Value.EyeAngles,
-                    nadeType,
-                    DateTime.Now,
-                    projectile.ItemIndex
-                );
+                GrenadeThrownData lastGrenadeThrown = new(position, angle, velocity, player.PlayerPawn.Value.CBodyComponent!.SceneNode!.AbsOrigin, player.PlayerPawn.Value.EyeAngles, nadeType, DateTime.Now, projectile.ItemIndex);
 
                 nadeSpecificLastGrenadeData[client][nadeType] = lastGrenadeThrown;
                 lastGrenadesData[client].Add(lastGrenadeThrown);
 
-                if (maxLastGrenadesSavedLimit != 0 && lastGrenadesData[client].Count > maxLastGrenadesSavedLimit)
-                {
-                    lastGrenadesData[client].RemoveAt(0);
-                }
+                if (maxLastGrenadesSavedLimit != 0 && lastGrenadesData[client].Count > maxLastGrenadesSavedLimit) lastGrenadesData[client].RemoveAt(0);
 
                 lastGrenadeThrownTime[(int)projectile.Index] = DateTime.Now;
                 if (smokeColorEnabled.Value && nadeType == "smoke")
@@ -281,35 +245,24 @@ public partial class MatchZy
                 }
             });
         }
-        catch (Exception e)
-        {
-            Log($"[OnEntitySpawnedHandler FATAL] An error occurred: {e.Message}");
-        }
+        catch (Exception e) { Log($"[OnEntitySpawnedHandler FATAL] An error occurred: {e.Message}"); }
     }
 
     public HookResult EventPlayerDeathPreHandler(EventPlayerDeath @event, GameEventInfo info)
     {
         try
         {
-            // We do not broadcast the suicide of the coach
             if (!matchStarted) return HookResult.Continue;
-
             if (@event.Attacker == @event.Userid)
             {
-                if (matchzyTeam1.coach.Contains(@event.Attacker!) || matchzyTeam2.coach.Contains(@event.Attacker!))
-                {
-                    info.DontBroadcast = true;
-                }
+                if (matchzyTeam1.coach.Contains(@event.Attacker!) || matchzyTeam2.coach.Contains(@event.Attacker!)) info.DontBroadcast = true;
             }
             return HookResult.Continue;
         }
-        catch (Exception e)
-        {
-            Log($"[EventPlayerDeathPreHandler FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
+        catch (Exception e) { Log($"[EventPlayerDeathPreHandler FATAL] An error occurred: {e.Message}"); return HookResult.Continue; }
     }
 
+    // --- 以下為投擲物偵測邏輯，完整保留自原始檔案 ---
     public HookResult EventSmokegrenadeDetonateHandler(EventSmokegrenadeDetonate @event, GameEventInfo info)
     {
         if (!isPractice || isDryRun) return HookResult.Continue;
