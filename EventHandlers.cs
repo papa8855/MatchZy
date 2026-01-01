@@ -133,7 +133,7 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // 1. 抓取物理分數
+        // 1. 直接從遊戲實體抓取物理上的 CT 和 T 分數
         int ctScore = 0;
         int tScore = 0;
         var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
@@ -142,39 +142,22 @@ public partial class MatchZy
             if (team.TeamNum == 2) tScore = team.Score;
         }
 
-        // 2. 判定 Team1 現在在哪一邊 (使用全域 playerData 字典判定)
-        int team1Score = 0;
-        int team2Score = 0;
-        CsTeam team1ActualSide = CsTeam.None;
+        // 2. 核心判定：利用 MatchZy 內建的 GetTargetTeamScore 邏輯
+        // 我們直接看「邏輯隊伍 1」目前的分數是多少
+        // 在 MatchZy 裡，GetTeamScore(1) 會自動根據 teamSide 抓取 CT 或 T 的分數
+        int team1Score = GetTeamScore(1); 
+        int team2Score = GetTeamScore(2);
 
-        // 掃描伺服器所有玩家，找出誰屬於 Team1
-        foreach (var player in Utilities.GetPlayers()) {
-            if (player == null || !player.IsValid) continue;
-            
-            // 透過 MatchZy 儲存玩家數據的字典來判斷玩家所屬隊伍
-            if (playerData.TryGetValue(player.SteamID, out var pData) && pData.TeamName == matchzyTeam1.teamName) {
-                team1ActualSide = player.Team;
-                break;
-            }
+        // 3. 判定誰贏了名字
+        string winnerName = "";
+        if (team1Score > team2Score) {
+            winnerName = matchzyTeam1.teamName;
+        } else if (team2Score > team1Score) {
+            winnerName = matchzyTeam2.teamName;
         }
 
-        // 3. 根據 Team1 的實際陣營分配分數
-        if (team1ActualSide == CsTeam.CounterTerrorist) {
-            team1Score = ctScore;
-            team2Score = tScore;
-        } else if (team1ActualSide == CsTeam.Terrorist) {
-            team1Score = tScore;
-            team2Score = ctScore;
-        } else {
-            // 如果真的抓不到，最後保險方案：直接用變數對位
-            team1Score = ctScore;
-            team2Score = tScore;
-        }
-
-        // 4. 判定贏家名字
-        string winnerName = (team1Score > team2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
-
-        // 5. 呼叫 MatchManagement.cs 裡的 EndSeries
+        // 4. 呼叫你的 MatchManagement.cs 裡的 EndSeries
+        // 這樣會觸發你在那邊寫好的：[MatchZy] 檢測到變數反轉，執行歸位。
         EndSeries(winnerName, 10, team1Score, team2Score);
 
         return HookResult.Continue;
