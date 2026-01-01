@@ -394,60 +394,37 @@ namespace MatchZy
             return true;
         }
 
-        // --- 修正處 2：防止 SetMapSides 根據 JSON 重置已開始的隊伍邏輯 ---
-        public void SetMapSides() {
-            int mapNumber = matchConfig.CurrentMapNumber;
-            
-            if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
+public void SetMapSides() {
+    // 關鍵鎖定：如果比賽已經開始 (Live)，絕對不要去動陣營，否則名字會跳回 JSON 預設
+    if (isMatchLive || matchStarted) {
+        Log("[MatchZy] 比賽進行中，跳過 SetMapSides 避免隊名回滾。");
+        return; 
+    }
 
-            string sideSetting = matchConfig.MapSides[mapNumber];
-            Log($"[SetMapSides] Map index: {mapNumber}, Setting: {sideSetting}, MatchStarted: {matchStarted}");
+    int mapNumber = matchConfig.CurrentMapNumber;
+    if (mapNumber < 0 || mapNumber >= matchConfig.MapSides.Count) return;
 
-            // [核心修正] 關鍵：如果比賽已經開始且設定是 knife，跳過所有重置邏輯，保持現狀
-            if (sideSetting == "knife" && matchStarted)
-            {
-                Log($"[SetMapSides] Match is LIVE. Ignoring 'knife' config and preserving current team sides selection.");
-                return;
-            }
+    string sideSetting = matchConfig.MapSides[mapNumber];
+    teamSides.Clear();
+    reverseTeamSides.Clear();
 
-            teamSides.Clear();
-            reverseTeamSides.Clear();
+    if (sideSetting == "team1_ct" || sideSetting == "team2_t") {
+        teamSides[matchzyTeam1] = "CT";
+        teamSides[matchzyTeam2] = "TERRORIST";
+    } else if (sideSetting == "team2_ct" || sideSetting == "team1_t") {
+        teamSides[matchzyTeam2] = "CT";
+        teamSides[matchzyTeam1] = "TERRORIST";
+    } else { // 包含 knife
+        isKnifeRequired = (sideSetting == "knife");
+        teamSides[matchzyTeam1] = "CT";
+        teamSides[matchzyTeam2] = "TERRORIST";
+    }
+    
+    reverseTeamSides["CT"] = (teamSides[matchzyTeam1] == "CT") ? matchzyTeam1 : matchzyTeam2;
+    reverseTeamSides["TERRORIST"] = (teamSides[matchzyTeam1] == "TERRORIST") ? matchzyTeam1 : matchzyTeam2;
 
-            if (sideSetting == "team1_ct" || sideSetting == "team2_t")
-            {
-                teamSides[matchzyTeam1] = "CT";
-                teamSides[matchzyTeam2] = "TERRORIST";
-                reverseTeamSides["CT"] = matchzyTeam1;
-                reverseTeamSides["TERRORIST"] = matchzyTeam2;
-                isKnifeRequired = false;
-            }
-            else if (sideSetting == "team2_ct" || sideSetting == "team1_t")
-            {
-                teamSides[matchzyTeam2] = "CT";
-                teamSides[matchzyTeam1] = "TERRORIST";
-                reverseTeamSides["CT"] = matchzyTeam2;
-                reverseTeamSides["TERRORIST"] = matchzyTeam1;
-                isKnifeRequired = false;
-            }
-            else if (sideSetting == "knife")
-            {
-                isKnifeRequired = true;
-                teamSides[matchzyTeam1] = "CT";
-                teamSides[matchzyTeam2] = "TERRORIST";
-                reverseTeamSides["CT"] = matchzyTeam1;
-                reverseTeamSides["TERRORIST"] = matchzyTeam2;
-            }
-            else 
-            {
-                teamSides[matchzyTeam1] = "CT";
-                teamSides[matchzyTeam2] = "TERRORIST";
-                reverseTeamSides["CT"] = matchzyTeam1;
-                reverseTeamSides["TERRORIST"] = matchzyTeam2;
-            }
-
-            ForceRefreshTeamNames();
-            UpdatePlayersMap();
-        }
+    ForceRefreshTeamNames();
+}
 
         // --- 修正處 3：回歸官方隊名邏輯，解決換邊後名字與隊伍不匹配問題 ---
         public void SetTeamNames()
@@ -472,11 +449,6 @@ namespace MatchZy
         public void ForceRefreshTeamNames()
         {
             SetTeamNames();
-            AddTimer(0.1f, SetTeamNames);
-            AddTimer(0.5f, SetTeamNames);
-            AddTimer(1.2f, SetTeamNames);
-            AddTimer(2.0f, SetTeamNames);
-            AddTimer(3.5f, SetTeamNames);
         }
 
         public void GetCvarValues(JObject jsonDataObject)
@@ -574,38 +546,25 @@ namespace MatchZy
 
         // --- 修正處 4：換邊處理，正確覆寫記憶體內的 JSON 配置以防回滾 ---
         public void SwapSidesInTeamData(bool swapTeams) {
-            if (!reverseTeamSides.ContainsKey("CT") || !reverseTeamSides.ContainsKey("TERRORIST")) return;
+    if (swapTeams) {
+        // 核心修正：直接交換 Team 物件，確保邏輯與物理位置同步
+        (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
+    }
 
-            // 1. 交換目前的邏輯隊伍物件
-            var teamCtObj = reverseTeamSides["CT"];
-            var teamTObj = reverseTeamSides["TERRORIST"];
+    teamSides[matchzyTeam1] = "CT";
+    teamSides[matchzyTeam2] = "TERRORIST";
+    reverseTeamSides["CT"] = matchzyTeam1;
+    reverseTeamSides["TERRORIST"] = matchzyTeam2;
 
-            reverseTeamSides["CT"] = teamTObj;
-            reverseTeamSides["TERRORIST"] = teamCtObj;
+    // 確保 JSON 配置也被覆寫，防止插件回頭讀取 "knife" 設定
+    if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count) {
+        matchConfig.MapSides[matchConfig.CurrentMapNumber] = (matchzyTeam1 == originalTeam1) ? "team1_ct" : "team2_ct";
+    }
 
-            teamSides[teamTObj] = "CT";
-            teamSides[teamCtObj] = "TERRORIST";
-
-            // [核心修正] 關鍵：將 JSON 配置中的 "knife" 覆寫為確定的分配 (例如 "team2_ct")
-            // 這樣在下一回合插件執行 SetMapSides 時，就不會因為看到 "knife" 而把分配重置
-            if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count)
-            {
-                string newSideSetting = "";
-                if (reverseTeamSides["CT"] == matchzyTeam1) newSideSetting = "team1_ct";
-                else if (reverseTeamSides["CT"] == matchzyTeam2) newSideSetting = "team2_ct";
-
-                if (!string.IsNullOrEmpty(newSideSetting))
-                {
-                    matchConfig.MapSides[matchConfig.CurrentMapNumber] = newSideSetting;
-                    Log($"[MatchZy] Knife switch handled. Updating MapSides JSON state to: {newSideSetting}");
-                }
-            }
-
-            Log($"[MatchZy] Swapped Sides logic. New CT Logical Team: {reverseTeamSides["CT"].teamName}");
-            
-            SetTeamNames();
-            ForceRefreshTeamNames();
-        }
+    // 強制刷新引擎隊名
+    SetTeamNames();
+    Log($"[MatchZy] 換邊完成。目前的 CT 是: {matchzyTeam1.teamName}");
+}
 
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
