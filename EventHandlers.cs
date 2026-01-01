@@ -14,36 +14,19 @@ public partial class MatchZy
             if (!IsPlayerValid(player)) return HookResult.Continue;
             Log($"[FULL CONNECT] Player ID: {player!.UserId}, Name: {player.PlayerName} has connected!");
 
-            // --- 移除了身分檢查踢人邏輯，確保所有人都能進來 ---
-
+            // 這裡保留了玩家數據更新，但移除了會導致誤踢的 Whitelist 檢查
             if (player.UserId.HasValue)
             {
                 playerData[player.UserId.Value] = player;
                 connectedPlayers++;
-                // 如果比賽已經開始，進來的人預設為已準備
-                playerReadyStatus[player.UserId.Value] = (readyAvailable && !matchStarted) ? false : true;
-            }
-
-            if (readyAvailable && !matchStarted && GetRealPlayersCount() == 1)
-            {
-                Log($"[FULL CONNECT] First player has connected, starting warmup!");
-                ExecUnpracCommands();
-                AutoStart();
-            }
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventPlayerConnectFull FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-    }
-
-            if (player.UserId.HasValue)
-            {
-                playerData[player.UserId.Value] = player;
-                connectedPlayers++;
-                playerReadyStatus[player.UserId.Value] = (readyAvailable && !matchStarted) ? false : true;
+                if (readyAvailable && !matchStarted)
+                {
+                    playerReadyStatus[player.UserId.Value] = false;
+                }
+                else
+                {
+                    playerReadyStatus[player.UserId.Value] = true;
+                }
             }
 
             if (readyAvailable && !matchStarted && GetRealPlayersCount() == 1)
@@ -66,7 +49,9 @@ public partial class MatchZy
         try
         {
             CCSPlayerController? player = @event.Userid;
-            if (!IsPlayerValid(player) || !player!.UserId.HasValue) return HookResult.Continue;
+
+            if (!IsPlayerValid(player)) return HookResult.Continue;
+            if (!player!.UserId.HasValue) return HookResult.Continue;
             int userId = player.UserId.Value;
 
             if (playerReadyStatus.ContainsKey(userId))
@@ -106,14 +91,14 @@ public partial class MatchZy
         return HookResult.Continue;
     }
 
-    // --- 核心修正處：解決地圖結束名字反轉 ---
+    // --- 核心修正處：解決地圖結束名字反轉與報錯 ---
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
     {
         try
         {
             if (!isMatchLive) return HookResult.Continue;
 
-            // 1. 抓取物理分數與目前的 CT 隊名 (直接從引擎抓，不報錯)
+            // 1. 抓取物理分數與目前的 CT 隊名
             int ctScore = 0;
             int tScore = 0;
             string currentCtName = "";
@@ -126,7 +111,7 @@ public partial class MatchZy
                 if (team.TeamNum == 2) tScore = team.Score;
             }
 
-            // 2. 判定邏輯：如果引擎裡的 CT 名字等於我們存的 Team1 名字，代表 Team1 現在是 CT
+            // 2. 判定邏輯：使用隊名比對，避開 teamSide 屬性報錯
             int t1Score, t2Score;
             if (currentCtName == matchzyTeam1.teamName) {
                 t1Score = ctScore;
@@ -138,7 +123,7 @@ public partial class MatchZy
 
             string winnerName = (t1Score > t2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
 
-            // 3. 呼叫 EndSeries 並傳入正確的分數對位
+            // 3. 呼叫 EndSeries 傳入正確分數
             EndSeries(winnerName, 10, t1Score, t2Score);
 
             return HookResult.Continue;
@@ -195,7 +180,8 @@ public partial class MatchZy
         }
     }
 
-    public HookResult EventPlayerGivenC4(EventPlayerGivenC4 @event, GameEventInfo info) {
+    public HookResult EventPlayerGivenC4(EventPlayerGivenC4 @event, GameEventInfo info) 
+    {
         try {
             if (!matchStarted) return HookResult.Continue;
             if (@event.Userid == null) return HookResult.Continue;
@@ -269,7 +255,6 @@ public partial class MatchZy
         catch (Exception e) { Log($"[EventPlayerDeathPreHandler FATAL] An error occurred: {e.Message}"); return HookResult.Continue; }
     }
 
-    // --- 以下為投擲物偵測邏輯，完整保留自原始檔案 ---
     public HookResult EventSmokegrenadeDetonateHandler(EventSmokegrenadeDetonate @event, GameEventInfo info)
     {
         if (!isPractice || isDryRun) return HookResult.Continue;
