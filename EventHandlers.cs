@@ -131,59 +131,49 @@ public partial class MatchZy
     {
         try
         {
-            HandleMatchEnd();
-            // ResetMatch();
+            if (!isMatchLive) return HookResult.Continue;
+
+            // 增加到 5 秒延遲，確保計分板隊名已經完全跳正
+            // 同時不再呼叫原本的 HandleMatchEnd()，避免噴出第一則錯誤廣播
+            AddTimer(5.0f, () => {
+                if (!isMatchLive) return;
+
+                int ctScore = 0;
+                int tScore = 0;
+                string currentCtName = "";
+                
+                // 1. 從引擎抓取此時此刻「正確」的隊名與分數
+                var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+                foreach (var team in teams) {
+                    if (team.TeamNum == 3) { // CT 隊伍
+                        ctScore = team.Score; 
+                        currentCtName = team.Teamname; 
+                    }
+                    if (team.TeamNum == 2) tScore = team.Score; // T 隊伍
+                }
+
+                // 2. 進行分數對位 (以 currentCtName 為基準)
+                int sendT1, sendT2;
+                if (currentCtName == matchzyTeam1.teamName) {
+                    sendT1 = ctScore; sendT2 = tScore;
+                } else {
+                    sendT1 = tScore; sendT2 = ctScore;
+                }
+
+                // 3. 算出真正贏家的名字
+                string winnerName = (sendT1 > sendT2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+
+                // 4. 呼叫 EndSeries
+                // 這會觸發 MatchManagement.cs 裡的廣播與換圖邏輯
+                Log($"[MatchZy] 5秒延遲結束，正確贏家為: {winnerName}, 準備換圖。");
+                EndSeries(winnerName, 10, sendT1, sendT2);
+            });
+
             return HookResult.Continue;
         }
         catch (Exception e)
         {
-            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-    }
-
-    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
-    {
-        try
-        {
-            HandlePostRoundStartEvent(@event);
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventRoundStart FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-    }
-
-    public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
-    {
-        try
-        {
-            if (!matchStarted) return HookResult.Continue;
-            HashSet<CCSPlayerController> coaches = GetAllCoaches();
-
-            foreach (var coach in coaches)
-            {
-                if (!IsPlayerValid(coach)) continue;
-                // If coaches are still left alive after freezetime ends, this code will force them to spectate their team again.
-                if (coach.PlayerPawn.Value?.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
-
-                Position coachPosition = new(coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsOrigin, coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsRotation);
-                coach!.PlayerPawn.Value!.Teleport(new Vector(coachPosition.PlayerPosition.X, coachPosition.PlayerPosition.Y, coachPosition.PlayerPosition.Z + 20.0f), coachPosition.PlayerAngle, new Vector(0, 0, 0));
-                AddTimer(1.5f, () =>
-                {
-                    coach!.PlayerPawn.Value!.Teleport(new Vector(coachPosition.PlayerPosition.X, coachPosition.PlayerPosition.Y, coachPosition.PlayerPosition.Z + 20.0f), coachPosition.PlayerAngle, new Vector(0, 0, 0));
-                    CsTeam oldTeam = GetCoachTeam(coach);
-                    coach.ChangeTeam(CsTeam.Spectator);
-                    AddTimer(0.01f, () => coach.ChangeTeam(oldTeam));
-                });
-            }
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventRoundFreezeEnd FATAL] An error occurred: {e.Message}");
+            Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
             return HookResult.Continue;
         }
     }
