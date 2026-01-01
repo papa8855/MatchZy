@@ -394,13 +394,19 @@ namespace MatchZy
                 Team2 = new(matchzyTeam2.id, matchzyTeam2.teamName),
             };
 
-            Task.Run(async () => {
-                await SendEventAsync(seriesStartedEvent);
-            });
+Task.Run(async () => {
+        await SendEventAsync(seriesStartedEvent);
+    });
 
-            Log($"[LoadMatchFromJSON] Success with matchid: {liveMatchId}!");
-            return true;
-        }
+    // --- 手動補回這段，解決 skip_veto 導致不顯示的問題 ---
+    if (matchConfig.MapPool != null && matchConfig.MapPool.Count > 0) {
+        string mapsList = string.Join(", ", matchConfig.MapPool);
+        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Blue}[LOADMATCH]{ChatColors.Default} MapsPool: {mapsList} MapsLeftInVetoPool: {mapsList}");
+    }
+
+    Log($"[LoadMatchFromJSON] Success with matchid: {liveMatchId}!");
+    return true;
+}
 
 public void SetMapSides() {
     // 關鍵鎖定：如果比賽已經開始 (Live)，絕對不要去動陣營，否則名字會跳回 JSON 預設
