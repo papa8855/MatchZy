@@ -133,7 +133,7 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // 1. 抓取物理分數
+        // 1. 直接從伺服器實體抓取 CT 和 T 的當前分數
         int ctScore = 0;
         int tScore = 0;
         var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
@@ -142,18 +142,20 @@ public partial class MatchZy
             if (team.TeamNum == 2) tScore = team.Score;
         }
 
-        // 2. 判定贏家名字 (修正屬性名稱為 side)
+        // 2. 判定贏家名字：利用 GetTargetTeamScore(1) 來確認 Team1 拿到的是哪個陣營的分數
+        int team1Score = GetTargetTeamScore(1); 
+        int team2Score = GetTargetTeamScore(2);
+
         string winnerName = "";
-        
-        // 嘗試使用 matchzyTeam1.side，如果還是報錯，請看下方的備選方案
-        if (matchzyTeam1.side == CsTeam.CounterTerrorist) {
-            winnerName = (ctScore > tScore) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
-        } else {
-            winnerName = (tScore > ctScore) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+        if (team1Score > team2Score) {
+            winnerName = matchzyTeam1.teamName;
+        } else if (team2Score > team1Score) {
+            winnerName = matchzyTeam2.teamName;
         }
 
-        // 3. 呼叫 EndSeries (對接 MatchManagement.cs)
-        EndSeries(winnerName, 10, ctScore, tScore);
+        // 3. 呼叫 MatchManagement.cs 裡的 EndSeries
+        // 傳入確定的贏家名字與分數
+        EndSeries(winnerName, 10, team1Score, team2Score);
 
         return HookResult.Continue;
     }
