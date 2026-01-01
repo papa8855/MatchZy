@@ -1,3 +1,4 @@
+
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
@@ -14,7 +15,27 @@ public partial class MatchZy
             if (!IsPlayerValid(player)) return HookResult.Continue;
             Log($"[FULL CONNECT] Player ID: {player!.UserId}, Name: {player.PlayerName} has connected!");
 
-            // 保持你要求的：不進行 JSON/SteamID 檢查，也不踢人
+            // Handling whitelisted players
+            if (!player.IsBot || !player.IsHLTV)
+            {
+                var steamId = player.SteamID;
+
+                bool kicked = isWhitelistRequired && HandlePlayerWhitelist(player, steamId.ToString());
+                if (kicked) return HookResult.Continue;
+
+                if (isMatchSetup || matchModeOnly)
+                {
+                    CsTeam team = GetPlayerTeam(player);
+                    if (team == CsTeam.None && isWhitelistRequired)
+                    {
+                        Log($"[EventPlayerConnectFull] KICKING PLAYER STEAMID: {steamId}, Name: {player.PlayerName} (NOT ALLOWED!)");
+                        PrintToAllChat($"Kicking player {player.PlayerName} - Not a player in this game.");
+                        KickPlayer(player);
+                        return HookResult.Continue;
+                    }
+                }
+            }
+
             if (player.UserId.HasValue)
             {
                 playerData[player.UserId.Value] = player;
@@ -28,9 +49,13 @@ public partial class MatchZy
                     playerReadyStatus[player.UserId.Value] = true;
                 }
             }
+            // May not be required, but just to be on safe side so that player data is properly updated in dictionaries
+            // Update: Commenting the below function as it was being called multiple times on map change.
+            // UpdatePlayersMap();
 
             if (readyAvailable && !matchStarted)
             {
+                // Start Warmup when first player connect and match is not started.
                 if (GetRealPlayersCount() == 1)
                 {
                     Log($"[FULL CONNECT] First player has connected, starting warmup!");
@@ -39,19 +64,21 @@ public partial class MatchZy
                 }
             }
             return HookResult.Continue;
+
         }
         catch (Exception e)
         {
             Log($"[EventPlayerConnectFull FATAL] An error occurred: {e.Message}");
             return HookResult.Continue;
         }
-    }
 
+    }
     public HookResult EventPlayerDisconnectHandler(EventPlayerDisconnect @event, GameEventInfo info)
     {
         try
         {
             CCSPlayerController? player = @event.Userid;
+
             if (!IsPlayerValid(player)) return HookResult.Continue;
             if (!player!.UserId.HasValue) return HookResult.Continue;
             int userId = player.UserId.Value;
@@ -90,57 +117,27 @@ public partial class MatchZy
 
     public HookResult EventCsWinPanelRoundHandler(EventCsWinPanelRound @event, GameEventInfo info)
     {
+        // EventCsWinPanelRound has stopped firing after Arms Race update, hence we handle knife round winner in EventRoundEnd.
+
+        // Log($"[EventCsWinPanelRound PRE] finalEvent: {@event.FinalEvent}");
+        // if (isKnifeRound && matchStarted)
+        // {
+        //     HandleKnifeWinner(@event);
+        // }
         return HookResult.Continue;
     }
 
-    // --- 核心修正處：解決地圖結束換圖時，聊天室隊名反轉的問題 ---
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
     {
         try
         {
-            if (!isMatchLive) return HookResult.Continue;
-
-            // 加上 1.0f (1秒) 的延遲，確保最後一回合的分數與隊名在引擎中完全定格
-            AddTimer(1.0f, () => {
-                int ctScore = 0;
-                int tScore = 0;
-                string currentCtName = "";
-                
-                // 從引擎抓取最真實的物理數據
-                var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-                foreach (var team in teams) {
-                    if (team.TeamNum == 3) {
-                        ctScore = team.Score; 
-                        currentCtName = team.Teamname; 
-                    }
-                    if (team.TeamNum == 2) tScore = team.Score;
-                }
-
-                // 根據「目前的物理 CT 隊名」來進行分數與系統變數的對位
-                int sendT1, sendT2;
-                if (currentCtName == matchzyTeam1.teamName) {
-                    // 目前畫面的 CT 是系統的 Team1
-                    sendT1 = ctScore;
-                    sendT2 = tScore;
-                } else {
-                    // 目前畫面的 CT 是系統的 Team2
-                    sendT1 = tScore;
-                    sendT2 = ctScore;
-                }
-
-                // 算出正確的贏家名字
-                string winnerName = (sendT1 > sendT2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
-
-                // 呼叫原本正常的 EndSeries 進行廣播與換圖
-                // 因為有了這 1 秒的緩衝，MatchManagement 就不會因為太快執行而錯亂
-                EndSeries(winnerName, 10, sendT1, sendT2);
-            });
-
+            HandleMatchEnd();
+            // ResetMatch();
             return HookResult.Continue;
         }
         catch (Exception e)
         {
-            Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
+            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
             return HookResult.Continue;
         }
     }
@@ -165,10 +162,13 @@ public partial class MatchZy
         {
             if (!matchStarted) return HookResult.Continue;
             HashSet<CCSPlayerController> coaches = GetAllCoaches();
+
             foreach (var coach in coaches)
             {
                 if (!IsPlayerValid(coach)) continue;
+                // If coaches are still left alive after freezetime ends, this code will force them to spectate their team again.
                 if (coach.PlayerPawn.Value?.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
+
                 Position coachPosition = new(coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsOrigin, coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsRotation);
                 coach!.PlayerPawn.Value!.Teleport(new Vector(coachPosition.PlayerPosition.X, coachPosition.PlayerPosition.Y, coachPosition.PlayerPosition.Z + 20.0f), coachPosition.PlayerAngle, new Vector(0, 0, 0));
                 AddTimer(1.5f, () =>
@@ -181,7 +181,11 @@ public partial class MatchZy
             }
             return HookResult.Continue;
         }
-        catch (Exception e) { return HookResult.Continue; }
+        catch (Exception e)
+        {
+            Log($"[EventRoundFreezeEnd FATAL] An error occurred: {e.Message}");
+            return HookResult.Continue;
+        }
     }
 
     public HookResult EventPlayerGivenC4(EventPlayerGivenC4 @event, GameEventInfo info) {
@@ -189,9 +193,15 @@ public partial class MatchZy
             if (!matchStarted) return HookResult.Continue;
             if (@event.Userid == null) return HookResult.Continue;
             var recv = @event.Userid;
+
+            // check if coach
             var coaches = reverseTeamSides["TERRORIST"].coach;
-            if (coaches.Contains(recv)) TransferCoachBomb(recv);
-        } catch (Exception e) { }
+            if (coaches.Contains(recv)) {
+                TransferCoachBomb(recv);
+            }
+        } catch (Exception e) {
+            Log($"[EventPlayerGivenC4 FATAL] An error occured: {e.Message}");
+        }
         return HookResult.Continue;
     }
 
@@ -204,72 +214,151 @@ public partial class MatchZy
 
             Server.NextFrame(() => {
                 CBaseCSGrenadeProjectile projectile = new CBaseCSGrenadeProjectile(entity.Handle);
-                if (!projectile.IsValid || !projectile.Thrower.IsValid || projectile.Thrower.Value?.Controller.Value == null) return;
+
+                if (!projectile.IsValid ||
+                    !projectile.Thrower.IsValid ||
+                    projectile.Thrower.Value == null ||
+                    projectile.Thrower.Value.Controller.Value == null ||
+                    projectile.Globalname == "custom"
+                ) return;
 
                 CCSPlayerController player = new(projectile.Thrower.Value.Controller.Value.Handle);
-                if(!player.IsValid || player.PlayerPawn.Value == null) return;
+                if(!player.IsValid || player.PlayerPawn.Value == null || !player.PlayerPawn.IsValid) return;
                 int client = player.UserId!.Value;
                 
+                Vector position = new(projectile.AbsOrigin!.X, projectile.AbsOrigin.Y, projectile.AbsOrigin.Z);
+                QAngle angle = new(projectile.AbsRotation!.X, projectile.AbsRotation.Y, projectile.AbsRotation.Z);
+                Vector velocity = new(projectile.AbsVelocity.X, projectile.AbsVelocity.Y, projectile.AbsVelocity.Z);
                 string nadeType = Constants.ProjectileTypeMap[entity.Entity.DesignerName];
-                if (!lastGrenadesData.ContainsKey(client)) lastGrenadesData[client] = new();
-                if (!nadeSpecificLastGrenadeData.ContainsKey(client)) nadeSpecificLastGrenadeData[client] = new(){};
+
+                if (!lastGrenadesData.ContainsKey(client)) {
+                    lastGrenadesData[client] = new();
+                }
+
+                if (!nadeSpecificLastGrenadeData.ContainsKey(client))
+                {
+                    nadeSpecificLastGrenadeData[client] = new(){};
+                }
 
                 GrenadeThrownData lastGrenadeThrown = new(
-                    new Vector(projectile.AbsOrigin!.X, projectile.AbsOrigin.Y, projectile.AbsOrigin.Z), 
-                    new QAngle(projectile.AbsRotation!.X, projectile.AbsRotation.Y, projectile.AbsRotation.Z), 
-                    new Vector(projectile.AbsVelocity.X, projectile.AbsVelocity.Y, projectile.AbsVelocity.Z), 
+                    position, 
+                    angle, 
+                    velocity, 
                     player.PlayerPawn.Value.CBodyComponent!.SceneNode!.AbsOrigin, 
                     player.PlayerPawn.Value.EyeAngles,
-                    nadeType, DateTime.Now, projectile.ItemIndex
+                    nadeType,
+                    DateTime.Now,
+                    projectile.ItemIndex
                 );
 
                 nadeSpecificLastGrenadeData[client][nadeType] = lastGrenadeThrown;
                 lastGrenadesData[client].Add(lastGrenadeThrown);
-                if (maxLastGrenadesSavedLimit != 0 && lastGrenadesData[client].Count > maxLastGrenadesSavedLimit) lastGrenadesData[client].RemoveAt(0);
+
+                if (maxLastGrenadesSavedLimit != 0 && lastGrenadesData[client].Count > maxLastGrenadesSavedLimit)
+                {
+                    lastGrenadesData[client].RemoveAt(0);
+                }
 
                 lastGrenadeThrownTime[(int)projectile.Index] = DateTime.Now;
+                if (smokeColorEnabled.Value && nadeType == "smoke")
+                {
+                    CSmokeGrenadeProjectile smokeProjectile = new(entity.Handle);
+                    smokeProjectile.SmokeColor.X = GetPlayerTeammateColor(player).R;
+                    smokeProjectile.SmokeColor.Y = GetPlayerTeammateColor(player).G;
+                    smokeProjectile.SmokeColor.Z = GetPlayerTeammateColor(player).B;
+                }
             });
-        } catch (Exception e) { }
+        }
+        catch (Exception e)
+        {
+            Log($"[OnEntitySpawnedHandler FATAL] An error occurred: {e.Message}");
+        }
     }
 
     public HookResult EventPlayerDeathPreHandler(EventPlayerDeath @event, GameEventInfo info)
     {
-        if (!matchStarted) return HookResult.Continue;
-        if (@event.Attacker == @event.Userid && (matchzyTeam1.coach.Contains(@event.Attacker!) || matchzyTeam2.coach.Contains(@event.Attacker!))) info.DontBroadcast = true;
-        return HookResult.Continue;
+        try
+        {
+            // We do not broadcast the suicide of the coach
+            if (!matchStarted) return HookResult.Continue;
+
+            if (@event.Attacker == @event.Userid)
+            {
+                if (matchzyTeam1.coach.Contains(@event.Attacker!) || matchzyTeam2.coach.Contains(@event.Attacker!))
+                {
+                    info.DontBroadcast = true;
+                }
+            }
+            return HookResult.Continue;
+        }
+        catch (Exception e)
+        {
+            Log($"[EventPlayerDeathPreHandler FATAL] An error occurred: {e.Message}");
+            return HookResult.Continue;
+        }
     }
 
     public HookResult EventSmokegrenadeDetonateHandler(EventSmokegrenadeDetonate @event, GameEventInfo info)
     {
         if (!isPractice || isDryRun) return HookResult.Continue;
-        if(lastGrenadeThrownTime.TryGetValue(@event.Entityid, out var thrownTime)) lastGrenadeThrownTime.Remove(@event.Entityid);
+        CCSPlayerController? player = @event.Userid;
+        if (!IsPlayerValid(player)) return HookResult.Continue;
+        if(lastGrenadeThrownTime.TryGetValue(@event.Entityid, out var thrownTime)) 
+        {
+            PrintToPlayerChat(player!, Localizer["matchzy.pracc.smoke", player!.PlayerName, $"{(DateTime.Now - thrownTime).TotalSeconds:0.00}"]);
+            lastGrenadeThrownTime.Remove(@event.Entityid);
+        }
         return HookResult.Continue;
     }
 
     public HookResult EventFlashbangDetonateHandler(EventFlashbangDetonate @event, GameEventInfo info)
     {
         if (!isPractice || isDryRun) return HookResult.Continue;
-        if(lastGrenadeThrownTime.TryGetValue(@event.Entityid, out var thrownTime)) lastGrenadeThrownTime.Remove(@event.Entityid);
+        CCSPlayerController? player = @event.Userid;
+        if (!IsPlayerValid(player)) return HookResult.Continue;
+        if(lastGrenadeThrownTime.TryGetValue(@event.Entityid, out var thrownTime)) 
+        {
+            PrintToPlayerChat(player!, Localizer["matchzy.pracc.flash", player!.PlayerName, $"{(DateTime.Now - thrownTime).TotalSeconds:0.00}"]);
+            lastGrenadeThrownTime.Remove(@event.Entityid);
+        }
         return HookResult.Continue;
     }
 
     public HookResult EventHegrenadeDetonateHandler(EventHegrenadeDetonate @event, GameEventInfo info)
     {
         if (!isPractice || isDryRun) return HookResult.Continue;
-        if(lastGrenadeThrownTime.TryGetValue(@event.Entityid, out var thrownTime)) lastGrenadeThrownTime.Remove(@event.Entityid);
+        CCSPlayerController? player = @event.Userid;
+        if (!IsPlayerValid(player)) return HookResult.Continue;
+        if(lastGrenadeThrownTime.TryGetValue(@event.Entityid, out var thrownTime)) 
+        {
+            PrintToPlayerChat(player!, Localizer["matchzy.pracc.grenade", player!.PlayerName, $"{(DateTime.Now - thrownTime).TotalSeconds:0.00}"]);
+            lastGrenadeThrownTime.Remove(@event.Entityid);
+        }
         return HookResult.Continue;
     }
 
     public HookResult EventMolotovDetonateHandler(EventMolotovDetonate @event, GameEventInfo info)
     {
         if (!isPractice || isDryRun) return HookResult.Continue;
+        CCSPlayerController? player = @event.Userid;
+        if (!IsPlayerValid(player)) return HookResult.Continue;
+        if(lastGrenadeThrownTime.TryGetValue(@event.Get<int>("entityid"), out var thrownTime)) 
+        {
+            PrintToPlayerChat(player!, Localizer["matchzy.pracc.molotov", player!.PlayerName, $"{(DateTime.Now - thrownTime).TotalSeconds:0.00}"]);
+        }
         return HookResult.Continue;
     }
 
     public HookResult EventDecoyDetonateHandler(EventDecoyStarted @event, GameEventInfo info)
     {
         if (!isPractice || isDryRun) return HookResult.Continue;
-        if(lastGrenadeThrownTime.TryGetValue(@event.Entityid, out var thrownTime)) lastGrenadeThrownTime.Remove(@event.Entityid);
+        CCSPlayerController? player = @event.Userid;
+        if (!IsPlayerValid(player)) return HookResult.Continue;
+        if(lastGrenadeThrownTime.TryGetValue(@event.Entityid, out var thrownTime)) 
+        {
+            PrintToPlayerChat(player!, Localizer["matchzy.pracc.decoy", player!.PlayerName, $"{(DateTime.Now - thrownTime).TotalSeconds:0.00}"]);
+            lastGrenadeThrownTime.Remove(@event.Entityid);
+        }
         return HookResult.Continue;
     }
 }
