@@ -142,18 +142,17 @@ public partial class MatchZy
             if (team.TeamNum == 2) tScore = team.Score;
         }
 
-        // 2. 核心：根據 matchzyTeam1 目前所在的陣營來決定誰贏
+        // 2. 判定贏家名字 (修正屬性名稱為 side)
         string winnerName = "";
-        if (matchzyTeam1.teamSide == CsTeam.CounterTerrorist) {
-            // 如果 Team1 目前在 CT
+        
+        // 嘗試使用 matchzyTeam1.side，如果還是報錯，請看下方的備選方案
+        if (matchzyTeam1.side == CsTeam.CounterTerrorist) {
             winnerName = (ctScore > tScore) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
         } else {
-            // 如果 Team1 目前在 T (說明換過邊了)
             winnerName = (tScore > ctScore) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
         }
 
-        // 3. 重要：我們不再呼叫 HandleMatchEnd()，因為它會弄亂名字
-        // 我們直接呼叫 EndSeries，並傳入我們「親手判定」的正確贏家名字
+        // 3. 呼叫 EndSeries (對接 MatchManagement.cs)
         EndSeries(winnerName, 10, ctScore, tScore);
 
         return HookResult.Continue;
