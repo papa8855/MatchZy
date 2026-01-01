@@ -133,7 +133,7 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // 1. 直接從伺服器實體抓取 CT 和 T 的當前分數
+        // 1. 直接從遊戲實體 (Entity) 抓取 CT 和 T 的即時分數
         int ctScore = 0;
         int tScore = 0;
         var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
@@ -142,19 +142,40 @@ public partial class MatchZy
             if (team.TeamNum == 2) tScore = team.Score;
         }
 
-        // 2. 判定贏家名字：利用 GetTargetTeamScore(1) 來確認 Team1 拿到的是哪個陣營的分數
-        int team1Score = GetTargetTeamScore(1); 
-        int team2Score = GetTargetTeamScore(2);
+        // 2. 判定 Team1 目前在哪一邊，並取得它的分數
+        // 我們用 GetPlayerTeam 檢查一個屬於 Team1 的玩家來確定 Team1 的陣營
+        int team1Score = 0;
+        int team2Score = 0;
+        CsTeam team1Side = CsTeam.None;
 
+        foreach (var player in Utilities.GetPlayers()) {
+            if (matchzyTeam1.players.ContainsKey(player.SteamID)) {
+                team1Side = player.Team;
+                break;
+            }
+        }
+
+        if (team1Side == CsTeam.CounterTerrorist) {
+            team1Score = ctScore;
+            team2Score = tScore;
+        } else if (team1Side == CsTeam.Terrorist) {
+            team1Score = tScore;
+            team2Score = ctScore;
+        } else {
+            // 如果沒抓到玩家位置，保守使用目前 matchzyTeam 變數內的數值
+            team1Score = ctScore; 
+            team2Score = tScore;
+        }
+
+        // 3. 根據分數決定贏家名字
         string winnerName = "";
         if (team1Score > team2Score) {
             winnerName = matchzyTeam1.teamName;
-        } else if (team2Score > team1Score) {
+        } else {
             winnerName = matchzyTeam2.teamName;
         }
 
-        // 3. 呼叫 MatchManagement.cs 裡的 EndSeries
-        // 傳入確定的贏家名字與分數
+        // 4. 呼叫 MatchManagement.cs 裡的 EndSeries，傳入校正後的名字與分數
         EndSeries(winnerName, 10, team1Score, team2Score);
 
         return HookResult.Continue;
