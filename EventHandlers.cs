@@ -1,8 +1,7 @@
+
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
-using CounterStrikeSharp.API.Modules.Events;
-using Vector = CounterStrikeSharp.API.Modules.Utils.Vector;
 
 namespace MatchZy;
 public partial class MatchZy
@@ -50,9 +49,13 @@ public partial class MatchZy
                     playerReadyStatus[player.UserId.Value] = true;
                 }
             }
+            // May not be required, but just to be on safe side so that player data is properly updated in dictionaries
+            // Update: Commenting the below function as it was being called multiple times on map change.
+            // UpdatePlayersMap();
 
             if (readyAvailable && !matchStarted)
             {
+                // Start Warmup when first player connect and match is not started.
                 if (GetRealPlayersCount() == 1)
                 {
                     Log($"[FULL CONNECT] First player has connected, starting warmup!");
@@ -114,28 +117,31 @@ public partial class MatchZy
 
     public HookResult EventCsWinPanelRoundHandler(EventCsWinPanelRound @event, GameEventInfo info)
     {
+        // EventCsWinPanelRound has stopped firing after Arms Race update, hence we handle knife round winner in EventRoundEnd.
+
+        // Log($"[EventCsWinPanelRound PRE] finalEvent: {@event.FinalEvent}");
+        // if (isKnifeRound && matchStarted)
+        // {
+        //     HandleKnifeWinner(@event);
+        // }
         return HookResult.Continue;
     }
 
-    // --- 核心修正：5 秒延遲測試 ---
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
     {
         try
         {
             if (!isMatchLive) return HookResult.Continue;
 
-            // 1. 移除 HandleMatchEnd(); 以封鎖原本太快且錯誤的訊息
-            Log($"[MatchZy] 偵測到地圖結束，啟動 5 秒結算延遲測試...");
+            // 1. 註解掉 HandleMatchEnd，就不會噴出第一則錯誤的廣播
+            // HandleMatchEnd();
 
-            // 2. 啟動 5 秒延遲，等待計分板跳正
+            // 2. 啟動 5 秒延遲，等計分板隊名跳正
             AddTimer(5.0f, () => {
                 if (!isMatchLive) return;
 
-                int ctScore = 0;
-                int tScore = 0;
+                int ctScore = 0, tScore = 0;
                 string currentCtName = "";
-                
-                // 3. 抓取 5 秒後正確的數據
                 var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
                 foreach (var team in teams) {
                     if (team.TeamNum == 3) {
@@ -153,10 +159,8 @@ public partial class MatchZy
                 }
 
                 string winnerName = (s1 > s2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
-
-                Log($"[MatchZy] 5秒延遲結束。物理CT名稱: {currentCtName}, 判定贏家: {winnerName}。呼叫 EndSeries。");
                 
-                // 4. 呼叫結算流程 (包含正確廣播與換圖)
+                // 3. 呼叫 EndSeries，這會發出正確的第二則廣播並自動換圖
                 EndSeries(winnerName, 10, s1, s2);
             });
 
@@ -164,7 +168,7 @@ public partial class MatchZy
         }
         catch (Exception e)
         {
-            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
+            Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
             return HookResult.Continue;
         }
     }
@@ -193,18 +197,17 @@ public partial class MatchZy
             foreach (var coach in coaches)
             {
                 if (!IsPlayerValid(coach)) continue;
+                // If coaches are still left alive after freezetime ends, this code will force them to spectate their team again.
                 if (coach.PlayerPawn.Value?.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
 
-                // 這裡使用了正確的 PlayerPosition 和 PlayerAngle
                 Position coachPosition = new(coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsOrigin, coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsRotation);
                 coach!.PlayerPawn.Value!.Teleport(new Vector(coachPosition.PlayerPosition.X, coachPosition.PlayerPosition.Y, coachPosition.PlayerPosition.Z + 20.0f), coachPosition.PlayerAngle, new Vector(0, 0, 0));
-                
                 AddTimer(1.5f, () =>
                 {
-                    if (!IsPlayerValid(coach)) return;
+                    coach!.PlayerPawn.Value!.Teleport(new Vector(coachPosition.PlayerPosition.X, coachPosition.PlayerPosition.Y, coachPosition.PlayerPosition.Z + 20.0f), coachPosition.PlayerAngle, new Vector(0, 0, 0));
                     CsTeam oldTeam = GetCoachTeam(coach);
                     coach.ChangeTeam(CsTeam.Spectator);
-                    AddTimer(0.01f, () => { if(IsPlayerValid(coach)) coach.ChangeTeam(oldTeam); });
+                    AddTimer(0.01f, () => coach.ChangeTeam(oldTeam));
                 });
             }
             return HookResult.Continue;
@@ -222,6 +225,7 @@ public partial class MatchZy
             if (@event.Userid == null) return HookResult.Continue;
             var recv = @event.Userid;
 
+            // check if coach
             var coaches = reverseTeamSides["TERRORIST"].coach;
             if (coaches.Contains(recv)) {
                 TransferCoachBomb(recv);
@@ -306,6 +310,7 @@ public partial class MatchZy
     {
         try
         {
+            // We do not broadcast the suicide of the coach
             if (!matchStarted) return HookResult.Continue;
 
             if (@event.Attacker == @event.Userid)
@@ -385,6 +390,18 @@ public partial class MatchZy
             PrintToPlayerChat(player!, Localizer["matchzy.pracc.decoy", player!.PlayerName, $"{(DateTime.Now - thrownTime).TotalSeconds:0.00}"]);
             lastGrenadeThrownTime.Remove(@event.Entityid);
         }
+        return HookResult.Continue;
+    }
+    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
+    {
+        try {
+            HandlePostRoundStartEvent(@event);
+            return HookResult.Continue;
+        } catch { return HookResult.Continue; }
+    }
+
+    public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
+    {
         return HookResult.Continue;
     }
 }
