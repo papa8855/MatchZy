@@ -67,8 +67,8 @@ namespace MatchZy
                 Log($"[EventPlayerConnectFull FATAL] An error occurred: {e.Message}");
                 return HookResult.Continue;
             }
-        }
 
+        }
         public HookResult EventPlayerDisconnectHandler(EventPlayerDisconnect @event, GameEventInfo info)
         {
             try
@@ -120,9 +120,9 @@ namespace MatchZy
         {
             try
             {
-                Log($"[EventCsWinPanelMatch] Match end. Resolving scores from engine (Non-Steam Environment)...");
+                Log($"[MatchZy] Match end. Synchronizing scores with dynamic team names (Non-Steam Fix)...");
 
-                // 1. 直接從引擎獲取當前數據，不依賴 MatchZy 內部的隊伍邏輯
+                // 1. 從遊戲引擎獲取當前數據 (反映當前物理陣營的真實分數)
                 var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
                 string engineCtTeamName = "";
                 int engineCtScore = 0;
@@ -141,36 +141,40 @@ namespace MatchZy
                     }
                 }
 
-                // 2. 校正邏輯：比對 engineCtTeamName 是否等於 matchzyTeam1.teamName
-                int t1MapScore = 0;
-                int t2MapScore = 0;
-                string winnerName = "Draw";
+                // 2. 抓取目前插件變數中的隊伍名稱 (Astralis/NaVi 等動態名稱)
+                string currentT1Name = matchzyTeam1.teamName;
+                string currentT2Name = matchzyTeam2.teamName;
+                int finalT1Score = 0;
+                int finalT2Score = 0;
 
-                if (engineCtTeamName == matchzyTeam1.teamName)
+                // 3. 核心比分校正：根據「名稱」來對位分數
+                if (engineCtTeamName == currentT1Name)
                 {
-                    t1MapScore = engineCtScore;
-                    t2MapScore = engineTScore;
+                    // 代表現在的 CT 陣營名稱 = Team1 的名稱
+                    finalT1Score = engineCtScore;
+                    finalT2Score = engineTScore;
                 }
                 else
                 {
-                    // 代表 Team2 目前是 CT
-                    t1MapScore = engineTScore;
-                    t2MapScore = engineCtScore;
+                    // 代表現在的 T 陣營名稱 = Team1 的名稱 (或者說 CT 是 Team2)
+                    finalT1Score = engineTScore;
+                    finalT2Score = engineCtScore;
                 }
 
-                // 3. 決定贏家字串 (用於 EndSeries)
-                if (t1MapScore > t2MapScore) winnerName = matchzyTeam1.teamName;
-                else if (t2MapScore > t1MapScore) winnerName = matchzyTeam2.teamName;
+                // 4. 根據正確對位後的分數決定贏家字串
+                string winnerName = "Draw";
+                if (finalT1Score > finalT2Score) winnerName = currentT1Name;
+                else if (finalT2Score > finalT1Score) winnerName = currentT2Name;
 
-                Log($"[EventCsWinPanelMatch] Final Scores -> T1({matchzyTeam1.teamName}): {t1MapScore}, T2({matchzyTeam2.teamName}): {t2MapScore}");
+                Log($"[MatchZy] Corrected Broadcast: {currentT1Name} ({finalT1Score}) vs {currentT2Name} ({finalT2Score})");
 
-                // 4. 更新狀態並調用 EndSeries
-                // 根據 MatchManagement.cs 定義：EndSeries(winnerName, restartDelay, t1score, t2score)
+                // 5. 處理結束邏輯
                 isMatchLive = false;
                 HandleMatchEnd();
-                
-                // 強制延遲 15 秒後換圖/重置
-                EndSeries(winnerName, 15, t1MapScore, t2MapScore);
+
+                // 6. 調用 EndSeries 並送入校正後的數據
+                // 這會觸發 MatchManagement.cs 裡的廣播與換圖邏輯
+                EndSeries(winnerName, 15, finalT1Score, finalT2Score);
 
                 return HookResult.Continue;
             }
