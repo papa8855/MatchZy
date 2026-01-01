@@ -398,19 +398,9 @@ Task.Run(async () => {
         await SendEventAsync(seriesStartedEvent);
     });
 
-    /* --- 就是加在這裡，放在 return true 之前 --- */
-    if (matchConfig.MapsPool != null && matchConfig.MapsPool.Count > 0) {
-        // 使用 MapsPool (有 s)，這會將地圖清單組合起來
-        string mapsList = string.Join(", ", matchConfig.MapsPool); 
-        // 在聊天室發出藍色的 [LOADMATCH] 訊息
-        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Blue}[LOADMATCH]{ChatColors.Default} MapsPool: {mapsList} MapsLeftInVetoPool: {mapsList}");
-    }
-    /* ------------------------------------------ */
-
     Log($"[LoadMatchFromJSON] Success with matchid: {liveMatchId}!");
-    return true; 
+    return true;
 }
-
 public void SetMapSides() {
     // 關鍵鎖定：如果比賽已經開始 (Live)，絕對不要去動陣營，否則名字會跳回 JSON 預設
     if (isMatchLive || matchStarted) {
