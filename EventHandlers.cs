@@ -133,32 +133,35 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // 1. 直接從遊戲實體抓取物理上的 CT 和 T 分數
+        // 1. 直接用官方 API 抓取 CT 和 T 的實體分數
         int ctScore = 0;
         int tScore = 0;
         var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
         foreach (var team in teams) {
-            if (team.TeamNum == 3) ctScore = team.Score; 
-            if (team.TeamNum == 2) tScore = team.Score;
+            if (team.TeamNum == 3) ctScore = team.Score; // 3 是 CT
+            if (team.TeamNum == 2) tScore = team.Score; // 2 是 T
         }
 
-        // 2. 核心判定：利用 MatchZy 內建的 GetTargetTeamScore 邏輯
-        // 我們直接看「邏輯隊伍 1」目前的分數是多少
-        // 在 MatchZy 裡，GetTeamScore(1) 會自動根據 teamSide 抓取 CT 或 T 的分數
-        int team1Score = GetTeamScore(1); 
-        int team2Score = GetTeamScore(2);
+        // 2. 判定邏輯：我們看 matchzyTeam1 目前在什麼位置 (TeamSide)
+        // 既然不能用函數，我們直接比對 matchzyTeam1.teamSide
+        int t1Score = 0;
+        int t2Score = 0;
 
-        // 3. 判定誰贏了名字
-        string winnerName = "";
-        if (team1Score > team2Score) {
-            winnerName = matchzyTeam1.teamName;
-        } else if (team2Score > team1Score) {
-            winnerName = matchzyTeam2.teamName;
+        // 這裡 matchzyTeam1.teamSide 是 CsTeam 型別
+        if (matchzyTeam1.teamSide == CsTeam.CounterTerrorist) {
+            t1Score = ctScore;
+            t2Score = tScore;
+        } else {
+            t1Score = tScore;
+            t2Score = ctScore;
         }
 
-        // 4. 呼叫你的 MatchManagement.cs 裡的 EndSeries
-        // 這樣會觸發你在那邊寫好的：[MatchZy] 檢測到變數反轉，執行歸位。
-        EndSeries(winnerName, 10, team1Score, team2Score);
+        // 3. 判定贏家名字
+        string winnerName = (t1Score > t2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+
+        // 4. 呼叫 EndSeries 並傳入正確的分數與名字
+        // 這會完美的與你 MatchManagement.cs 裡的 EndSeries 邏輯對接
+        EndSeries(winnerName, 10, t1Score, t2Score);
 
         return HookResult.Continue;
     }
@@ -168,19 +171,6 @@ public partial class MatchZy
         return HookResult.Continue;
     }
 }
-    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
-    {
-        try
-        {
-            HandlePostRoundStartEvent(@event);
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventRoundStart FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-    }
 
     public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
     {
