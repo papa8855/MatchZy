@@ -607,32 +607,32 @@ public void SetMapSides() {
 
      public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // --- 關鍵校正：無視傳入的 winnerName，根據分數重新抓取隊名 ---
-    // 因為您在 SwapSides 已經物理換過 matchzyTeam1，所以只要 t1score > t2score，贏家就是 matchzyTeam1
+    // --- 關鍵校正：根據分數重新抓取隊名，確保 winnerName 是正確的 ---
     if (t1score > t2score) {
         winnerName = matchzyTeam1.teamName;
     } else if (t2score > t1score) {
         winnerName = matchzyTeam2.teamName;
     }
 
-    // 1. 聊天室廣播（使用校正後的名字）
-    if (winnerName == null) {
-        Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
+    // --- 修正處：保留地圖勝利隊伍訊息，移除比分或其他多餘廣播 ---
+    if (winnerName != null) {
+        // 這行會保留：[MatchZy] 隊伍名 贏得了本場地圖！
+        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖勝利！");
     } else {
-        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
+        Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     }
 
-    // 2. 判定 Winner ID 與 大分加分
+    // 2. 判定 Winner ID 與 大分加分 (其餘邏輯維持原樣，確保數據正確)
     string winnerId = "0";
     string winnerKey = "none";
 
     if (winnerName != null && originalTeam1 != null) {
         if (winnerName == originalTeam1.teamName) {
-            matchzyTeam1.seriesScore++; // 這裡必須手動加分，原本代碼漏掉了
+            matchzyTeam1.seriesScore++; 
             winnerId = "1";
             winnerKey = "team1";
         } else {
-            matchzyTeam2.seriesScore++; // 幫原始 Team2 加分
+            matchzyTeam2.seriesScore++; 
             winnerId = "2";
             winnerKey = "team2";
         }
@@ -653,7 +653,7 @@ public void SetMapSides() {
 
     // 4. 物理歸位：在換圖前必須把變數換回來
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 檢測到變數反轉，執行歸位。");
+       // Log("[MatchZy] 檢測到變數反轉，執行歸位。"); //
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
