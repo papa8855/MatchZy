@@ -138,6 +138,7 @@ public partial class MatchZy
 
             // 2. 啟動 5 秒延遲，等待計分板「跳正」
             AddTimer(5.0f, () => {
+                // 再次檢查，防止重複觸發
                 if (!isMatchLive) return;
 
                 int ctScore = 0;
@@ -147,11 +148,11 @@ public partial class MatchZy
                 // 3. 從引擎抓取跳正後的正確數據
                 var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
                 foreach (var team in teams) {
-                    if (team.TeamNum == 3) {
+                    if (team.TeamNum == 3) { // CT
                         ctScore = team.Score; 
                         currentCtName = team.Teamname; 
                     }
-                    if (team.TeamNum == 2) tScore = team.Score;
+                    if (team.TeamNum == 2) tScore = team.Score; // T
                 }
 
                 // 4. 分數對位
@@ -164,6 +165,10 @@ public partial class MatchZy
 
                 // 5. 判定贏家並執行結算
                 string winnerName = (s1 > s2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+                
+                Log($"[MatchZy] 5秒延遲結束。物理CT名稱: {currentCtName}, 判定贏家: {winnerName}。呼叫 EndSeries。");
+                
+                // 呼叫 EndSeries 來執行正確廣播與換圖程序
                 EndSeries(winnerName, 10, s1, s2);
             });
 
