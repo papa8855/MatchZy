@@ -607,54 +607,56 @@ public void SetMapSides() {
 
        public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 1. 廣播正確的贏家名字
+    // 1. 聊天室廣播 (這部分你應該已經正確)
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
     }
 
-    // 2. 核心修正：判斷大分應該加在誰身上
-    // 這裡不看 team1/team2 變數，直接看名字比對
+    // --- 關鍵修正處：解決系統訊息 (Event) 顯示相反 ---
+    
+    // 我們要決定發送給系統的 ID 是 "1" (Team1) 還是 "2" (Team2)
+    // 這裡必須跟 originalTeam1 比對，因為系統(Discord/API)認的是「原始定義」的隊伍 ID
+    string winnerId = "0";
+    string winnerKey = "none";
+
     if (winnerName != null) {
-        if (winnerName == matchzyTeam1.teamName) {
-            matchzyTeam1.seriesScore++;
-        } else if (winnerName == matchzyTeam2.teamName) {
-            matchzyTeam2.seriesScore++;
+        if (winnerName == originalTeam1?.teamName) {
+            winnerId = "1";
+            winnerKey = "team1";
+        } else if (winnerName == originalTeam2?.teamName) {
+            winnerId = "2";
+            winnerKey = "team2";
         }
     }
 
-// 3. 換圖前的「歸位」邏輯
-    // 我們直接檢查：目前的 matchzyTeam1 是否已經不是「原始」的那一隊了
-    // 如果 originalTeam1 已經被我們換到 matchzyTeam2 去了，就代表現在是反轉狀態
-    if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 檢測到變數對位反轉，正在執行物理歸位以確保下一場地圖正確。");
-        (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
-    }
-
-    // 4. 發送事件 (這會影響你的 Discord 推播訊息)
-    string winnerId = "0";
-    if (winnerName == matchzyTeam1.teamName) winnerId = "1";
-    else if (winnerName == matchzyTeam2.teamName) winnerId = "2";
-
+    // 2. 修正 SeriesResultEvent
     var seriesResultEvent = new MatchZySeriesResultEvent() {
         MatchId = liveMatchId,
-        Winner = new Winner(winnerId, winnerId == "1" ? "team1" : "team2"),
-        Team1SeriesScore = matchzyTeam1.seriesScore,
-        Team2SeriesScore = matchzyTeam2.seriesScore,
+        // 確保這裡的 Winner 物件 抓到的是正確的 ID
+        Winner = new Winner(winnerId, winnerKey), 
+        // 確保分數也是對應原始隊伍
+        Team1SeriesScore = (originalTeam1 == matchzyTeam1) ? matchzyTeam1.seriesScore : matchzyTeam2.seriesScore,
+        Team2SeriesScore = (originalTeam2 == matchzyTeam2) ? matchzyTeam2.seriesScore : matchzyTeam1.seriesScore,
         TimeUntilRestore = 10,
     };
 
+    // --- 歸位邏輯 (保留你原本寫好的部分) ---
+    if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
+        Log("[MatchZy] 執行物理歸位。");
+        (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
+    }
+
+    // 3. 發送事件與寫入資料庫
     Task.Run(async () => {
-        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
+        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", seriesResultEvent.Team1SeriesScore, seriesResultEvent.Team2SeriesScore);
         await Task.Delay(2000);
         await SendEventAsync(seriesResultEvent);
     });
 
     if (resetCvarsOnSeriesEnd) ResetChangedConvars();
     isMatchLive = false;
-
-    // 延遲執行換圖或重置
     AddTimer(restartDelay, () => {
         ResetMatch(false);
     });
