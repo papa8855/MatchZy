@@ -21,12 +21,16 @@ namespace MatchZy
 
         public string loadedConfigFile = "";
 
-        public Team matchzyTeam1 = new() {
+       public Team matchzyTeam1 = new() {
             teamName = "Team1"
         };
         public Team matchzyTeam2 = new() {
             teamName = "Team2"
         };
+
+        // --- 補上這兩行，讓程式記住誰是原始的第一隊 ---
+        public Team? originalTeam1;
+        public Team? originalTeam2;
 
         public Dictionary<Team, string> teamSides = new();
         public Dictionary<string, Team> reverseTeamSides = new();
@@ -296,6 +300,10 @@ namespace MatchZy
 
             matchzyTeam1.teamName = RemoveSpecialCharacters(team1["name"]!.ToString());
             matchzyTeam2.teamName = RemoveSpecialCharacters(team2["name"]!.ToString());
+
+           // --- 新增這兩行：把剛讀到的名字備份起來 ---
+           originalTeam1 = matchzyTeam1;
+            originalTeam2 = matchzyTeam2;
             matchzyTeam1.teamPlayers = team1["players"];
             matchzyTeam2.teamPlayers = team2["players"];
 
@@ -597,50 +605,56 @@ public void SetMapSides() {
             return isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
         }
 
-        public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
+       public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    long matchid = liveMatchId;
-    // 取得目前兩隊在大分表上的分數
-    (int team1SeriesScore, int team2SeriesScore) = (matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
-
-    if (winnerName == null)
-    {
-        PrintToAllChat($"{ChatColors.Green}{matchzyTeam1.teamName}{ChatColors.Default} and {ChatColors.Green}{matchzyTeam2.teamName}{ChatColors.Default} 戰平了比賽");
-    }
-    else
-    {
-        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了比賽！");
+    // 1. 廣播正確的贏家名字
+    if (winnerName == null) {
+        Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
+    } else {
+        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
     }
 
-    // --- 核心修正：根據勝者名稱精確判定 ---
-    string winnerTeam = "none";
-    if (winnerName != null) 
-    {
-        // 誰的名字等於勝者名字，誰就是勝者隊伍
-        if (winnerName == matchzyTeam1.teamName) winnerTeam = "team1";
-        else if (winnerName == matchzyTeam2.teamName) winnerTeam = "team2";
+    // 2. 核心修正：判斷大分應該加在誰身上
+    // 這裡不看 team1/team2 變數，直接看名字比對
+    if (winnerName != null) {
+        if (winnerName == matchzyTeam1.teamName) {
+            matchzyTeam1.seriesScore++;
+        } else if (winnerName == matchzyTeam2.teamName) {
+            matchzyTeam2.seriesScore++;
+        }
     }
 
-    // 準備發送給資料庫或 Webhook 的事件資料
-    var seriesResultEvent = new MatchZySeriesResultEvent()
-    {
-        MatchId = matchid,
-        // 這裡的 Winner 邏輯也必須根據實際隊名修正
-        Winner = new Winner(winnerTeam == "team1" ? "1" : "2", winnerTeam),
-        Team1SeriesScore = team1SeriesScore,
-        Team2SeriesScore = team2SeriesScore,
+    // 3. 換圖前的「歸位」邏輯
+    // 如果目前的 matchzyTeam1 不是「原始的第一隊」，我們必須在換圖前換回來
+    // 否則下一張圖載入 JSON 時，名字會完全相反
+    if (matchzyTeam1.teamName == matchConfig.Team2Name || (matchzyTeam1 != originalTeam1 && originalTeam1 != null)) {
+        Log("[MatchZy] 檢測到變數對位反轉，正在執行物理歸位以確保下一場地圖正確。");
+        (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
+    }
+
+    // 4. 發送事件 (這會影響你的 Discord 推播訊息)
+    string winnerId = "0";
+    if (winnerName == matchzyTeam1.teamName) winnerId = "1";
+    else if (winnerName == matchzyTeam2.teamName) winnerId = "2";
+
+    var seriesResultEvent = new MatchZySeriesResultEvent() {
+        MatchId = liveMatchId,
+        Winner = new Winner(winnerId, winnerId == "1" ? "team1" : "team2"),
+        Team1SeriesScore = matchzyTeam1.seriesScore,
+        Team2SeriesScore = matchzyTeam2.seriesScore,
         TimeUntilRestore = 10,
     };
 
     Task.Run(async () => {
-        await database.SetMatchEndData(matchid, winnerName ?? "Draw", team1SeriesScore, team2SeriesScore);
+        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
         await Task.Delay(2000);
         await SendEventAsync(seriesResultEvent);
     });
 
     if (resetCvarsOnSeriesEnd) ResetChangedConvars();
     isMatchLive = false;
-    
+
+    // 延遲執行換圖或重置
     AddTimer(restartDelay, () => {
         ResetMatch(false);
     });
