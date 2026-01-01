@@ -131,43 +131,8 @@ public partial class MatchZy
     {
         try
         {
-            if (!isMatchLive) return HookResult.Continue;
-
-            // 1. 移除 HandleMatchEnd(); 以封鎖原本太快且錯誤的訊息
-            Log($"[MatchZy] 偵測到地圖結束，啟動 5 秒結算延遲測試...");
-
-            // 2. 啟動 5 秒延遲，等待計分板跳正
-            AddTimer(5.0f, () => {
-                if (!isMatchLive) return;
-
-                int ctScore = 0, tScore = 0;
-                string currentCtName = "";
-                
-                // 3. 抓取數據
-                var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-                foreach (var team in teams) {
-                    if (team.TeamNum == 3) {
-                        ctScore = team.Score; 
-                        currentCtName = team.Teamname; 
-                    }
-                    if (team.TeamNum == 2) tScore = team.Score;
-                }
-
-                int s1, s2;
-                if (currentCtName == matchzyTeam1.teamName) {
-                    s1 = ctScore; s2 = tScore;
-                } else {
-                    s1 = tScore; s2 = ctScore;
-                }
-
-                string winnerName = (s1 > s2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
-
-                Log($"[MatchZy] 5秒延遲結束。判定贏家: {winnerName}。呼叫 EndSeries。");
-                
-                // 4. 呼叫結算流程 (會觸發正確廣播與換圖)
-                EndSeries(winnerName, 10, s1, s2);
-            });
-
+            HandleMatchEnd();
+            // ResetMatch();
             return HookResult.Continue;
         }
         catch (Exception e)
