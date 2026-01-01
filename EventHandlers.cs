@@ -133,9 +133,9 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // 使用 matchzyTeam 物件裡存的分數，這在 MatchZy 裡最保險
-        int t1Score = matchzyTeam1.score; 
-        int t2Score = matchzyTeam2.score;
+        // 修正點：將 score 改為首字母大寫的 Score
+        int t1Score = matchzyTeam1.Score; 
+        int t2Score = matchzyTeam2.Score;
 
         string winnerName = "";
         if (t1Score > t2Score) {
@@ -144,7 +144,7 @@ public partial class MatchZy
             winnerName = matchzyTeam2.teamName;
         }
 
-        // 呼叫您在 MatchManagement.cs 已經改好的 EndSeries
+        // 呼叫 EndSeries
         EndSeries(winnerName, 10, t1Score, t2Score);
 
         return HookResult.Continue;
