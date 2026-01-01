@@ -28,9 +28,9 @@ namespace MatchZy
             teamName = "Team2"
         };
 
-        // --- 補上這兩行，讓程式記住誰是原始的第一隊 ---
-        public Team? originalTeam1;
-        public Team? originalTeam2;
+       // --- 請務必補上這兩行，這是修正對位錯誤的關鍵 ---
+       public Team? originalTeam1;
+       public Team? originalTeam2;
 
         public Dictionary<Team, string> teamSides = new();
         public Dictionary<string, Team> reverseTeamSides = new();
@@ -302,7 +302,7 @@ namespace MatchZy
             matchzyTeam2.teamName = RemoveSpecialCharacters(team2["name"]!.ToString());
 
            // --- 新增這兩行：把剛讀到的名字備份起來 ---
-           originalTeam1 = matchzyTeam1;
+            originalTeam1 = matchzyTeam1;
             originalTeam2 = matchzyTeam2;
             matchzyTeam1.teamPlayers = team1["players"];
             matchzyTeam2.teamPlayers = team2["players"];
@@ -607,65 +607,54 @@ public void SetMapSides() {
 
        public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 1. 聊天室廣播（這部分通常是正確的，因為直接用名字）
+    // 1. 聊天室廣播（直接用獲勝者名字，通常不會錯）
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
     }
 
-    // --- 關鍵修正：解決換圖訊息相反 ---
-    // 我們要強行定義誰才是真正的 "1" 號隊伍 (原始 Team1)
+    // --- 關鍵修正：解決地圖結束顯示相反 ---
     string winnerId = "0";
     string winnerKey = "none";
 
     if (winnerName != null) {
-        // 這裡不再相信任何 index，直接比對名字
+        // 我們不看位置，只看名字。如果贏家名字是原始的第一隊，ID 就是 "1"
         if (winnerName == originalTeam1?.teamName) {
-            winnerId = "1"; // 如果贏家是原始 Team1，ID 必為 1
+            winnerId = "1";
             winnerKey = "team1";
         } else if (winnerName == originalTeam2?.teamName) {
-            winnerId = "2"; // 如果贏家是原始 Team2，ID 必為 2
+            winnerId = "2";
             winnerKey = "team2";
         }
     }
 
-    // 取得當前大分 (seriesScore)
-    int seriesScore1 = matchzyTeam1.seriesScore;
-    int seriesScore2 = matchzyTeam2.seriesScore;
-
-    // 確保 Event 發送的分數與原始隊伍掛鉤
-    // 如果現在 matchzyTeam1 其實是原始的 Team2，我們要把分數換回來發送
-    int eventScore1 = (matchzyTeam1 == originalTeam1) ? seriesScore1 : seriesScore2;
-    int eventScore2 = (matchzyTeam1 == originalTeam1) ? seriesScore2 : seriesScore1;
+    // 取得大分（必須根據原始隊伍來對應分數）
+    int finalScore1 = (matchzyTeam1 == originalTeam1) ? matchzyTeam1.seriesScore : matchzyTeam2.seriesScore;
+    int finalScore2 = (matchzyTeam1 == originalTeam1) ? matchzyTeam2.seriesScore : matchzyTeam1.seriesScore;
 
     var seriesResultEvent = new MatchZySeriesResultEvent() {
         MatchId = liveMatchId,
-        Winner = new Winner(winnerId, winnerKey), // 這裡使用了上面校正過的 winnerId
-        Team1SeriesScore = eventScore1,
-        Team2SeriesScore = eventScore2,
+        Winner = new Winner(winnerId, winnerKey), // 使用上面校正後的 winnerId
+        Team1SeriesScore = finalScore1,
+        Team2SeriesScore = finalScore2,
         TimeUntilRestore = 10,
     };
 
-    // --- 物理歸位 ---
-    // 換圖前必須把 matchzyTeam1 換回 originalTeam1，否則下一張圖載入時會完全顛倒
+    // 換圖前物理歸位：把變數換回來，下一張圖才不會名字相反
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 換圖歸位：將 matchzyTeam1 恢復為原始狀態。");
+        Log("[MatchZy] 換圖歸位：將隊伍變數恢復至原始狀態。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
-    // 2. 發送至資料庫與 Event
     Task.Run(async () => {
-        // 這裡的分數也要用校正後的 eventScore
-        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", eventScore1, eventScore2);
+        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", finalScore1, finalScore2);
         await Task.Delay(2000);
         await SendEventAsync(seriesResultEvent);
     });
 
     if (resetCvarsOnSeriesEnd) ResetChangedConvars();
     isMatchLive = false;
-
-    // 3. 延遲換圖
     AddTimer(restartDelay, () => {
         ResetMatch(false);
     });
