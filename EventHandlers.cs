@@ -133,10 +133,18 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // 修正點：將 score 改為首字母大寫的 Score
-        int t1Score = matchzyTeam1.Score; 
-        int t2Score = matchzyTeam2.Score;
+        // --- 方案：直接從遊戲引擎的 TeamManager 抓取分數，避開變數命名問題 ---
+        int t1Score = 0;
+        int t2Score = 0;
 
+        var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+        foreach (var team in teams)
+        {
+            if (team.TeamNum == 3) t1Score = team.Score; // CT 分數
+            if (team.TeamNum == 2) t2Score = team.Score; // T 分數
+        }
+
+        // 根據分數判定誰是贏家名字 (這裡對應 MatchManagement.cs 裡的 matchzyTeam1/2)
         string winnerName = "";
         if (t1Score > t2Score) {
             winnerName = matchzyTeam1.teamName;
@@ -144,7 +152,8 @@ public partial class MatchZy
             winnerName = matchzyTeam2.teamName;
         }
 
-        // 呼叫 EndSeries
+        // 呼叫你在 MatchManagement.cs 修改過的 EndSeries
+        // 這會觸發加分、數據庫紀錄、訊息廣播與變數歸位
         EndSeries(winnerName, 10, t1Score, t2Score);
 
         return HookResult.Continue;
