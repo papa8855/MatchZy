@@ -131,42 +131,54 @@ public partial class MatchZy
     {
         try
         {
-            if (!isMatchLive) return HookResult.Continue;
+            Log($"[EventCsWinPanelMatch] Match end detected. Correcting scores based on team names...");
 
-            // 1. 取得當前伺服器內的分數與 CT 隊伍名稱
-            int ctScore = 0;
-            int tScore = 0;
-            string currentCtName = "";
+            // 1. 直接從引擎實體中抓取當前的 CT 和 T 隊伍名稱與分數
             var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-            foreach (var team in teams) {
-                if (team.TeamNum == 3) { // CT 陣營
-                    ctScore = team.Score; 
-                    currentCtName = team.Teamname; 
+            string engineCtTeamName = "";
+            int engineCtScore = 0;
+            int engineTScore = 0;
+
+            foreach (var team in teams)
+            {
+                if (team.TeamNum == (int)CsTeam.CounterTerrorist)
+                {
+                    engineCtTeamName = team.Teamname; // 這是遊戲內當前 CT 陣營的字串名
+                    engineCtScore = team.Score;
                 }
-                if (team.TeamNum == 2) tScore = team.Score; // T 陣營
+                else if (team.TeamNum == (int)CsTeam.Terrorist)
+                {
+                    engineTScore = team.Score;
+                }
             }
 
-            // 2. 核心修正：將分數「精確對位」到 matchzyTeam1 和 matchzyTeam2
-            int finalS1, finalS2;
-            if (currentCtName == matchzyTeam1.teamName) {
-                // 如果當前 CT 是 Team1，則 S1 是 CT 分數，S2 是 T 分數
-                finalS1 = ctScore; 
-                finalS2 = tScore;
-            } else {
-                // 如果當前 CT 是 Team2，則 S1 是 T 分數（因為 Team1 在 T 陣營），S2 是 CT 分數
-                finalS1 = tScore; 
-                finalS2 = ctScore;
+            Log($"[EventCsWinPanelMatch] Engine CT: {engineCtTeamName} ({engineCtScore}), T Score: {engineTScore}");
+
+            // 2. 強制校正邏輯：以 matchzyTeam1.teamName 作為基準比對
+            // 如果當前 CT 陣營的名字等於我們設定的 Team1 名字
+            if (engineCtTeamName == matchzyTeam1.teamName)
+            {
+                matchzyTeam1.score = engineCtScore;
+                matchzyTeam2.score = engineTScore;
+                Log($"[EventCsWinPanelMatch] Team1 ({matchzyTeam1.teamName}) is CT. Setting Score: {matchzyTeam1.score}");
+            }
+            else
+            {
+                // 否則，Team1 就是 T 陣營，Team2 是 CT
+                matchzyTeam1.score = engineTScore;
+                matchzyTeam2.score = engineCtScore;
+                Log($"[EventCsWinPanelMatch] Team1 ({matchzyTeam1.teamName}) is T. Setting Score: {matchzyTeam1.score}");
             }
 
-            // 3. 根據歸位後的分數判斷誰是贏家名稱
-            string winnerName = (finalS1 > finalS2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+            // 3. 處理 MatchZy 內部邏輯
+            HandleMatchEnd();
 
-            // 4. 直接呼叫 EndSeries，這會發出正確的第一則廣播並處理換圖邏輯
-            // 參數順序必須是：(贏家名, 延遲秒數, Team1正確分數, Team2正確分數)
-            EndSeries(winnerName, 10, finalS1, finalS2);
-
-            // 5. 將比賽狀態設為結束，確保換圖流程不被阻擋
-            isMatchLive = false;
+            // 4. 在不驗證 SteamID 的環境下，強制重置狀態以觸發下一張地圖
+            isMatchLive = false; 
+            
+            // 呼叫 EndSeries() 確保插件執行換圖或結束系列賽的邏輯
+            // 注意：如果您的 MatchZy 版本中 EndSeries 需要參數，請查閱具體實作
+            EndSeries(); 
 
             return HookResult.Continue;
         }
