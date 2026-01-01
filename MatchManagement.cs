@@ -598,53 +598,53 @@ public void SetMapSides() {
         }
 
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
-        {
-            long matchId = liveMatchId;
-            (int team1Score, int team2Score) = (matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
-            if (winnerName == null)
-            {
-                PrintToAllChat($"{ChatColors.Green}{matchzyTeam1.teamName}{ChatColors.Default} and {ChatColors.Green}{matchzyTeam2.teamName}{ChatColors.Default} have tied the match");
-            }
-            else
-            {
-                Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} has won the match");
-            }
+{
+    long matchid = liveMatchId;
+    // 取得目前兩隊在大分表上的分數
+    (int team1SeriesScore, int team2SeriesScore) = (matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
 
-            string winnerTeam = "none";
-            
-            if (winnerName != null) 
-            {
-                if (matchzyTeam1.teamName == winnerName) winnerTeam = "team1";
-                else if (matchzyTeam2.teamName == winnerName) winnerTeam = "team2";
-                else winnerTeam = matchzyTeam1.seriesScore > matchzyTeam2.seriesScore ? "team1" : "team2";
-            }
-            else
-            {
-                winnerTeam = matchzyTeam1.seriesScore > matchzyTeam2.seriesScore ? "team1" : "team2";
-            }
+    if (winnerName == null)
+    {
+        PrintToAllChat($"{ChatColors.Green}{matchzyTeam1.teamName}{ChatColors.Default} and {ChatColors.Green}{matchzyTeam2.teamName}{ChatColors.Default} 戰平了比賽");
+    }
+    else
+    {
+        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了比賽！");
+    }
 
-            var seriesResultEvent = new MatchZySeriesResultEvent()
-            {
-                MatchId = matchId,
-                Winner = new Winner(t1score > t2score && reverseTeamSides["CT"] == matchzyTeam1 ? "3" : "2", winnerTeam),
-                Team1SeriesScore = team1Score,
-                Team2SeriesScore = team2Score,
-                TimeUntilRestore = 10,
-            };
+    // --- 核心修正：根據勝者名稱精確判定 ---
+    string winnerTeam = "none";
+    if (winnerName != null) 
+    {
+        // 誰的名字等於勝者名字，誰就是勝者隊伍
+        if (winnerName == matchzyTeam1.teamName) winnerTeam = "team1";
+        else if (winnerName == matchzyTeam2.teamName) winnerTeam = "team2";
+    }
 
-            Task.Run(async () => {
-                await database.SetMatchEndData(matchId, winnerName ?? "Draw", team1Score, team2Score);
-                await Task.Delay(2000);
-                await SendEventAsync(seriesResultEvent);
-            });
+    // 準備發送給資料庫或 Webhook 的事件資料
+    var seriesResultEvent = new MatchZySeriesResultEvent()
+    {
+        MatchId = matchid,
+        // 這裡的 Winner 邏輯也必須根據實際隊名修正
+        Winner = new Winner(winnerTeam == "team1" ? "1" : "2", winnerTeam),
+        Team1SeriesScore = team1SeriesScore,
+        Team2SeriesScore = team2SeriesScore,
+        TimeUntilRestore = 10,
+    };
 
-            if (resetCvarsOnSeriesEnd) ResetChangedConvars();
-            isMatchLive = false;
-            AddTimer(restartDelay, () => {
-                ResetMatch(false);
-            });
-        }
+    Task.Run(async () => {
+        await database.SetMatchEndData(matchid, winnerName ?? "Draw", team1SeriesScore, team2SeriesScore);
+        await Task.Delay(2000);
+        await SendEventAsync(seriesResultEvent);
+    });
 
+    if (resetCvarsOnSeriesEnd) ResetChangedConvars();
+    isMatchLive = false;
+    
+    AddTimer(restartDelay, () => {
+        ResetMatch(false);
+    });
+}
         public void HandlePlayoutConfig()
         {
             if (isPlayOutEnabled) {
