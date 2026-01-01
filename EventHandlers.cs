@@ -10,27 +10,34 @@ public partial class MatchZy
         try
         {
             CCSPlayerController? player = @event.Userid;
+
             if (!IsPlayerValid(player)) return HookResult.Continue;
             Log($"[FULL CONNECT] Player ID: {player!.UserId}, Name: {player.PlayerName} has connected!");
 
-            if (!player.IsBot || !player.IsHLTV)
-            {
-                var steamId = player.SteamID;
-                bool kicked = HandlePlayerWhitelist(player, steamId.ToString());
-                if (kicked) return HookResult.Continue;
+            // --- 移除了身分檢查踢人邏輯，確保所有人都能進來 ---
 
-                if (isMatchSetup || matchModeOnly)
-                {
-                    CsTeam team = GetPlayerTeam(player);
-                    if (team == CsTeam.None)
-                    {
-                        Log($"[EventPlayerConnectFull] KICKING PLAYER STEAMID: {steamId}, Name: {player.PlayerName} (NOT ALLOWED!)");
-                        PrintToAllChat($"Kicking player {player.PlayerName} - Not a player in this game.");
-                        KickPlayer(player);
-                        return HookResult.Continue;
-                    }
-                }
+            if (player.UserId.HasValue)
+            {
+                playerData[player.UserId.Value] = player;
+                connectedPlayers++;
+                // 如果比賽已經開始，進來的人預設為已準備
+                playerReadyStatus[player.UserId.Value] = (readyAvailable && !matchStarted) ? false : true;
             }
+
+            if (readyAvailable && !matchStarted && GetRealPlayersCount() == 1)
+            {
+                Log($"[FULL CONNECT] First player has connected, starting warmup!");
+                ExecUnpracCommands();
+                AutoStart();
+            }
+            return HookResult.Continue;
+        }
+        catch (Exception e)
+        {
+            Log($"[EventPlayerConnectFull FATAL] An error occurred: {e.Message}");
+            return HookResult.Continue;
+        }
+    }
 
             if (player.UserId.HasValue)
             {
