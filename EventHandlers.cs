@@ -131,27 +131,48 @@ public partial class MatchZy
     {
         try
         {
-            HandleMatchEnd();
-            // ResetMatch();
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-    }
+            if (!isMatchLive) return HookResult.Continue;
 
-    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
-    {
-        try
-        {
-            HandlePostRoundStartEvent(@event);
+            // 1. 取得當前引擎中的分數與 CT 隊名
+            int ctScore = 0;
+            int tScore = 0;
+            string currentCtName = "";
+            var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+            foreach (var team in teams) {
+                if (team.TeamNum == 3) { // CT
+                    ctScore = team.Score; 
+                    currentCtName = team.Teamname; 
+                }
+                if (team.TeamNum == 2) tScore = team.Score; // T
+            }
+
+            // 2. 核心修正：根據 CT 隊名，決定誰是 Team1 分數，誰是 Team2 分數
+            int finalTeam1Score, finalTeam2Score;
+            if (currentCtName == matchzyTeam1.teamName) {
+                // 如果當前 CT 是 Team1，則 s1=CT分數, s2=T分數
+                finalTeam1Score = ctScore; 
+                finalTeam2Score = tScore;
+            } else {
+                // 如果當前 CT 是 Team2，則 s1=T分數, s2=CT分數
+                finalTeam1Score = tScore; 
+                finalTeam2Score = ctScore;
+            }
+
+            // 3. 判斷贏家名稱 (這部分你說原本就是對的，我們維持邏輯)
+            string winnerName = (finalTeam1Score > finalTeam2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+
+            // 4. 呼叫 EndSeries
+            // 注意：這裡傳入的順序必須是 (贏家, 延遲, Team1分數, Team2分數)
+            EndSeries(winnerName, 10, finalTeam1Score, finalTeam2Score);
+
+            // 5. 將狀態設為 false 以利插件執行後續換圖清理
+            isMatchLive = false;
+
             return HookResult.Continue;
         }
         catch (Exception e)
         {
-            Log($"[EventRoundStart FATAL] An error occurred: {e.Message}");
+            Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
             return HookResult.Continue;
         }
     }
