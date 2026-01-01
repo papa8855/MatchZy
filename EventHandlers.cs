@@ -1,3 +1,4 @@
+
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
@@ -48,9 +49,13 @@ public partial class MatchZy
                     playerReadyStatus[player.UserId.Value] = true;
                 }
             }
+            // May not be required, but just to be on safe side so that player data is properly updated in dictionaries
+            // Update: Commenting the below function as it was being called multiple times on map change.
+            // UpdatePlayersMap();
 
             if (readyAvailable && !matchStarted)
             {
+                // Start Warmup when first player connect and match is not started.
                 if (GetRealPlayersCount() == 1)
                 {
                     Log($"[FULL CONNECT] First player has connected, starting warmup!");
@@ -112,6 +117,13 @@ public partial class MatchZy
 
     public HookResult EventCsWinPanelRoundHandler(EventCsWinPanelRound @event, GameEventInfo info)
     {
+        // EventCsWinPanelRound has stopped firing after Arms Race update, hence we handle knife round winner in EventRoundEnd.
+
+        // Log($"[EventCsWinPanelRound PRE] finalEvent: {@event.FinalEvent}");
+        // if (isKnifeRound && matchStarted)
+        // {
+        //     HandleKnifeWinner(@event);
+        // }
         return HookResult.Continue;
     }
 
@@ -119,62 +131,8 @@ public partial class MatchZy
     {
         try
         {
-            Log($"[MatchZy] Match end detected. Synchronizing scores with team names...");
-
-            // 1. 直接從遊戲引擎獲取當前數據 (這是目前遊戲中 CT 與 T 的真實隊名與分數)
-            var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-            string engineCtName = "";
-            int engineCtScore = 0;
-            int engineTScore = 0;
-
-            foreach (var team in teams)
-            {
-                if (team.TeamNum == (int)CsTeam.CounterTerrorist)
-                {
-                    engineCtName = team.Teamname;
-                    engineCtScore = team.Score;
-                }
-                else if (team.TeamNum == (int)CsTeam.Terrorist)
-                {
-                    engineTScore = team.Score;
-                }
-            }
-
-            // 2. 校正邏輯：根據「名稱」重新分配比分
-            // 確保 finalT1Score 永遠對應 matchzyTeam1.teamName (例如 Astralis)
-            int finalT1Score = 0;
-            int finalT2Score = 0;
-
-            if (engineCtName == matchzyTeam1.teamName)
-            {
-                // 如果目前物理上的 CT 名稱等於 Team1 的名稱
-                finalT1Score = engineCtScore;
-                finalT2Score = engineTScore;
-            }
-            else
-            {
-                // 否則 Team1 此時必在 T 陣營 (或隊名在 T)
-                finalT1Score = engineTScore;
-                finalT2Score = engineCtScore;
-            }
-
-            // 3. 判定贏家名字
-            string winnerName = "Draw";
-            if (finalT1Score > finalT2Score) winnerName = matchzyTeam1.teamName;
-            else if (finalT2Score > finalT1Score) winnerName = matchzyTeam2.teamName;
-
-            Log($"[MatchZy] Final Sync: {matchzyTeam1.teamName} [{finalT1Score}:{finalT2Score}] {matchzyTeam2.teamName}");
-
-            // 4. 強制解除比賽進行狀態，確保換圖流程能被觸發
-            isMatchLive = false;
-
-            // 5. 處理原始 MatchZy 結尾邏輯 (日誌紀錄等)
             HandleMatchEnd();
-
-            // 6. 呼叫 EndSeries 發送正確廣播並執行換圖
-            // 參數：(贏家名, 延遲秒數, Team1分數, Team2分數)
-            EndSeries(winnerName, 15, finalT1Score, finalT2Score);
-
+            // ResetMatch();
             return HookResult.Continue;
         }
         catch (Exception e)
@@ -208,6 +166,7 @@ public partial class MatchZy
             foreach (var coach in coaches)
             {
                 if (!IsPlayerValid(coach)) continue;
+                // If coaches are still left alive after freezetime ends, this code will force them to spectate their team again.
                 if (coach.PlayerPawn.Value?.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
 
                 Position coachPosition = new(coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsOrigin, coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsRotation);
@@ -235,6 +194,7 @@ public partial class MatchZy
             if (@event.Userid == null) return HookResult.Continue;
             var recv = @event.Userid;
 
+            // check if coach
             var coaches = reverseTeamSides["TERRORIST"].coach;
             if (coaches.Contains(recv)) {
                 TransferCoachBomb(recv);
@@ -319,6 +279,7 @@ public partial class MatchZy
     {
         try
         {
+            // We do not broadcast the suicide of the coach
             if (!matchStarted) return HookResult.Continue;
 
             if (@event.Attacker == @event.Userid)
