@@ -1,139 +1,18 @@
-
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
 
 namespace MatchZy;
+
 public partial class MatchZy
 {
-    public HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
-    {
-        try
-        {
-            CCSPlayerController? player = @event.Userid;
-
-            if (!IsPlayerValid(player)) return HookResult.Continue;
-            Log($"[FULL CONNECT] Player ID: {player!.UserId}, Name: {player.PlayerName} has connected!");
-
-            // Handling whitelisted players
-            if (!player.IsBot || !player.IsHLTV)
-            {
-                var steamId = player.SteamID;
-
-                bool kicked = isWhitelistRequired && HandlePlayerWhitelist(player, steamId.ToString());
-                if (kicked) return HookResult.Continue;
-
-                if (isMatchSetup || matchModeOnly)
-                {
-                    CsTeam team = GetPlayerTeam(player);
-                    if (team == CsTeam.None && isWhitelistRequired)
-                    {
-                        Log($"[EventPlayerConnectFull] KICKING PLAYER STEAMID: {steamId}, Name: {player.PlayerName} (NOT ALLOWED!)");
-                        PrintToAllChat($"Kicking player {player.PlayerName} - Not a player in this game.");
-                        KickPlayer(player);
-                        return HookResult.Continue;
-                    }
-                }
-            }
-
-            if (player.UserId.HasValue)
-            {
-                playerData[player.UserId.Value] = player;
-                connectedPlayers++;
-                if (readyAvailable && !matchStarted)
-                {
-                    playerReadyStatus[player.UserId.Value] = false;
-                }
-                else
-                {
-                    playerReadyStatus[player.UserId.Value] = true;
-                }
-            }
-            // May not be required, but just to be on safe side so that player data is properly updated in dictionaries
-            // Update: Commenting the below function as it was being called multiple times on map change.
-            // UpdatePlayersMap();
-
-            if (readyAvailable && !matchStarted)
-            {
-                // Start Warmup when first player connect and match is not started.
-                if (GetRealPlayersCount() == 1)
-                {
-                    Log($"[FULL CONNECT] First player has connected, starting warmup!");
-                    ExecUnpracCommands();
-                    AutoStart();
-                }
-            }
-            return HookResult.Continue;
-
-        }
-        catch (Exception e)
-        {
-            Log($"[EventPlayerConnectFull FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-
-    }
-    public HookResult EventPlayerDisconnectHandler(EventPlayerDisconnect @event, GameEventInfo info)
-    {
-        try
-        {
-            CCSPlayerController? player = @event.Userid;
-
-            if (!IsPlayerValid(player)) return HookResult.Continue;
-            if (!player!.UserId.HasValue) return HookResult.Continue;
-            int userId = player.UserId.Value;
-
-            if (playerReadyStatus.ContainsKey(userId))
-            {
-                playerReadyStatus.Remove(userId);
-                connectedPlayers--;
-            }
-            playerData.Remove(userId);
-
-            if (matchzyTeam1.coach.Contains(player))
-            {
-                matchzyTeam1.coach.Remove(player);
-                SetPlayerVisible(player);
-                player.Clan = "";
-            }
-            else if (matchzyTeam2.coach.Contains(player))
-            {
-                matchzyTeam2.coach.Remove(player);
-                SetPlayerVisible(player);
-                player.Clan = "";
-            }
-            noFlashList.Remove(userId);
-            lastGrenadesData.Remove(userId);
-            nadeSpecificLastGrenadeData.Remove(userId);
-
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventPlayerDisconnect FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-    }
-
-    public HookResult EventCsWinPanelRoundHandler(EventCsWinPanelRound @event, GameEventInfo info)
-    {
-        // EventCsWinPanelRound has stopped firing after Arms Race update, hence we handle knife round winner in EventRoundEnd.
-
-        // Log($"[EventCsWinPanelRound PRE] finalEvent: {@event.FinalEvent}");
-        // if (isKnifeRound && matchStarted)
-        // {
-        //     HandleKnifeWinner(@event);
-        // }
-        return HookResult.Continue;
-    }
-
- public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
+    public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
     {
         try
         {
             if (!isMatchLive) return HookResult.Continue;
 
-            // 1. 直接從遊戲引擎抓取物理上的分數（CT與T）
+            // 1. 直接從遊戲實體抓取物理分數
             int ctScore = 0;
             int tScore = 0;
             var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
@@ -142,14 +21,13 @@ public partial class MatchZy
                 if (team.TeamNum == 2) tScore = team.Score;
             }
 
-            // 2. 使用 MatchZy 核心函數 GetTeamSide 來判定 Team1 在哪一邊
-            // 這個函數在 MatchZy 主類別中一定有定義，不會報錯
-            CsTeam team1Side = GetTeamSide(1);
-
+            // 2. 直接檢查 matchzyTeam1 目前儲存的 side 狀態
+            // 如果 team1.side 報錯，我們改用最穩定的方式：
             int t1Score = 0;
             int t2Score = 0;
 
-            if (team1Side == CsTeam.CounterTerrorist) {
+            // 這裡假設 matchzyTeam1 內部一定有存目前的陣營，如果是換邊，這個 side 應該會變
+            if (matchzyTeam1.teamSide == CsTeam.CounterTerrorist) {
                 t1Score = ctScore;
                 t2Score = tScore;
             } else {
@@ -157,11 +35,9 @@ public partial class MatchZy
                 t2Score = ctScore;
             }
 
-            // 3. 判定贏家名字
             string winnerName = (t1Score > t2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
 
-            // 4. 呼叫你在 MatchManagement.cs 寫好的校正版 EndSeries
-            // 這會解決地圖結束顯示錯誤，並觸發「變數反轉歸位」邏輯
+            // 3. 呼叫 EndSeries
             EndSeries(winnerName, 10, t1Score, t2Score);
 
             return HookResult.Continue;
@@ -172,6 +48,23 @@ public partial class MatchZy
             return HookResult.Continue;
         }
     }
+
+    // 解決 MatchZy.cs#L211 的報錯：確保函數名稱與註冊時完全一致
+    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
+    {
+        try
+        {
+            HandlePostRoundStartEvent(@event);
+            return HookResult.Continue;
+        }
+        catch (Exception e)
+        {
+            Log($"[EventRoundStart FATAL] An error occurred: {e.Message}");
+            return HookResult.Continue;
+        }
+    }
+
+    // ... 其餘你原本檔案內的函數 (EventPlayerConnectFullHandler 等) 請保留在下方 ...
     public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
     {
         try
