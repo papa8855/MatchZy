@@ -607,56 +607,62 @@ public void SetMapSides() {
 
        public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 1. 聊天室廣播 (這部分你應該已經正確)
+    // 1. 聊天室廣播（維持 winnerName 原樣，這是準確的）
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
     }
 
-    // --- 關鍵修正處：解決系統訊息 (Event) 顯示相反 ---
-    
-    // 我們要決定發送給系統的 ID 是 "1" (Team1) 還是 "2" (Team2)
-    // 這裡必須跟 originalTeam1 比對，因為系統(Discord/API)認的是「原始定義」的隊伍 ID
+    // 2. 核心修正：根據「原始隊名」來決定誰是大分贏家
+    // 我們要定義發送給系統的 ID (1 或 2)
     string winnerId = "0";
     string winnerKey = "none";
 
+    // 判斷獲勝者到底是「一開始」的 Team1 還是 Team2
     if (winnerName != null) {
         if (winnerName == originalTeam1?.teamName) {
+            matchzyTeam1.seriesScore++; // 加分給原始 Team1
             winnerId = "1";
             winnerKey = "team1";
         } else if (winnerName == originalTeam2?.teamName) {
+            matchzyTeam2.seriesScore++; // 加分給原始 Team2
             winnerId = "2";
             winnerKey = "team2";
         }
     }
 
-    // 2. 修正 SeriesResultEvent
+    // 3. 準備發送給系統（如 Discord 或網頁後台）的正確分數
+    // 這裡分數的順序必須跟當初 JSON 載入時的 Team1, Team2 一致
+    int finalScore1 = (originalTeam1 == matchzyTeam1) ? matchzyTeam1.seriesScore : matchzyTeam2.seriesScore;
+    int finalScore2 = (originalTeam2 == matchzyTeam2) ? matchzyTeam2.seriesScore : matchzyTeam1.seriesScore;
+
     var seriesResultEvent = new MatchZySeriesResultEvent() {
         MatchId = liveMatchId,
-        // 確保這裡的 Winner 物件 抓到的是正確的 ID
-        Winner = new Winner(winnerId, winnerKey), 
-        // 確保分數也是對應原始隊伍
-        Team1SeriesScore = (originalTeam1 == matchzyTeam1) ? matchzyTeam1.seriesScore : matchzyTeam2.seriesScore,
-        Team2SeriesScore = (originalTeam2 == matchzyTeam2) ? matchzyTeam2.seriesScore : matchzyTeam1.seriesScore,
+        Winner = new Winner(winnerId, winnerKey), // 這裡的 winnerId 已經校正過了
+        Team1SeriesScore = finalScore1,
+        Team2SeriesScore = finalScore2,
         TimeUntilRestore = 10,
     };
 
-    // --- 歸位邏輯 (保留你原本寫好的部分) ---
+    // 4. 關鍵物理歸位：在換下一張地圖前，把 matchzyTeam1 換回 originalTeam1
+    // 如果不換回來，下一場地圖的起始隊名就會直接反掉
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 執行物理歸位。");
+        Log("[MatchZy] 換圖前執行物理歸位，修正對位。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
-    // 3. 發送事件與寫入資料庫
+    // 5. 發送資料
     Task.Run(async () => {
-        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", seriesResultEvent.Team1SeriesScore, seriesResultEvent.Team2SeriesScore);
+        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", finalScore1, finalScore2);
         await Task.Delay(2000);
         await SendEventAsync(seriesResultEvent);
     });
 
     if (resetCvarsOnSeriesEnd) ResetChangedConvars();
     isMatchLive = false;
+
+    // 6. 延遲換圖
     AddTimer(restartDelay, () => {
         ResetMatch(false);
     });
