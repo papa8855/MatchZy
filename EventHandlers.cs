@@ -133,12 +133,10 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // 1. 直接獲取當前伺服器的分數
-       int t1Score = matchzyTeam1.score; 
-       int t2Score = matchzyTeam2.score;
+        // 使用 matchzyTeam 物件裡存的分數，這在 MatchZy 裡最保險
+        int t1Score = matchzyTeam1.score; 
+        int t2Score = matchzyTeam2.score;
 
-        // 2. 核心校正：比分數決定誰是贏家名字
-        // 這樣就不會受到遊戲引擎 CT/T 陣營交換的影響
         string winnerName = "";
         if (t1Score > t2Score) {
             winnerName = matchzyTeam1.teamName;
@@ -146,8 +144,7 @@ public partial class MatchZy
             winnerName = matchzyTeam2.teamName;
         }
 
-        // 3. 呼叫 EndSeries (這會執行你在 MatchManagement (3).cs 寫好的邏輯)
-        // 注意：如果你已經在 EndSeries 裡寫了廣播訊息，這裡就不用再寫 PrintToChat
+        // 呼叫您在 MatchManagement.cs 已經改好的 EndSeries
         EndSeries(winnerName, 10, t1Score, t2Score);
 
         return HookResult.Continue;
@@ -158,7 +155,6 @@ public partial class MatchZy
         return HookResult.Continue;
     }
 }
-
     public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
     {
         try
