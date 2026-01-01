@@ -133,7 +133,7 @@ public partial class MatchZy
     {
         if (!isMatchLive) return HookResult.Continue;
 
-        // 1. 直接從遊戲實體 (Entity) 抓取 CT 和 T 的即時分數
+        // 1. 抓取物理分數
         int ctScore = 0;
         int tScore = 0;
         var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
@@ -142,40 +142,39 @@ public partial class MatchZy
             if (team.TeamNum == 2) tScore = team.Score;
         }
 
-        // 2. 判定 Team1 目前在哪一邊，並取得它的分數
-        // 我們用 GetPlayerTeam 檢查一個屬於 Team1 的玩家來確定 Team1 的陣營
+        // 2. 判定 Team1 現在在哪一邊 (使用全域 playerData 字典判定)
         int team1Score = 0;
         int team2Score = 0;
-        CsTeam team1Side = CsTeam.None;
+        CsTeam team1ActualSide = CsTeam.None;
 
+        // 掃描伺服器所有玩家，找出誰屬於 Team1
         foreach (var player in Utilities.GetPlayers()) {
-            if (matchzyTeam1.players.ContainsKey(player.SteamID)) {
-                team1Side = player.Team;
+            if (player == null || !player.IsValid) continue;
+            
+            // 透過 MatchZy 儲存玩家數據的字典來判斷玩家所屬隊伍
+            if (playerData.TryGetValue(player.SteamID, out var pData) && pData.TeamName == matchzyTeam1.teamName) {
+                team1ActualSide = player.Team;
                 break;
             }
         }
 
-        if (team1Side == CsTeam.CounterTerrorist) {
+        // 3. 根據 Team1 的實際陣營分配分數
+        if (team1ActualSide == CsTeam.CounterTerrorist) {
             team1Score = ctScore;
             team2Score = tScore;
-        } else if (team1Side == CsTeam.Terrorist) {
+        } else if (team1ActualSide == CsTeam.Terrorist) {
             team1Score = tScore;
             team2Score = ctScore;
         } else {
-            // 如果沒抓到玩家位置，保守使用目前 matchzyTeam 變數內的數值
-            team1Score = ctScore; 
+            // 如果真的抓不到，最後保險方案：直接用變數對位
+            team1Score = ctScore;
             team2Score = tScore;
         }
 
-        // 3. 根據分數決定贏家名字
-        string winnerName = "";
-        if (team1Score > team2Score) {
-            winnerName = matchzyTeam1.teamName;
-        } else {
-            winnerName = matchzyTeam2.teamName;
-        }
+        // 4. 判定贏家名字
+        string winnerName = (team1Score > team2Score) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
 
-        // 4. 呼叫 MatchManagement.cs 裡的 EndSeries，傳入校正後的名字與分數
+        // 5. 呼叫 MatchManagement.cs 裡的 EndSeries
         EndSeries(winnerName, 10, team1Score, team2Score);
 
         return HookResult.Continue;
