@@ -134,8 +134,8 @@ public partial class MatchZy
         if (!isMatchLive) return HookResult.Continue;
 
         // 1. 直接獲取當前伺服器的分數
-        int t1Score = GetTeamScore(1);
-        int t2Score = GetTeamScore(2);
+       int t1Score = matchzyTeam1.score; 
+       int t2Score = matchzyTeam2.score;
 
         // 2. 核心校正：比分數決定誰是贏家名字
         // 這樣就不會受到遊戲引擎 CT/T 陣營交換的影響
