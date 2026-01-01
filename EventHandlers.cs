@@ -133,15 +133,17 @@ public partial class MatchZy
         {
             if (!isMatchLive) return HookResult.Continue;
 
-            // 1. 註解掉 HandleMatchEnd，就不會噴出第一則錯誤的廣播
-            // HandleMatchEnd();
+            // 1. 移除 HandleMatchEnd(); 以封鎖原本太快且錯誤的訊息
+            Log($"[MatchZy] 偵測到地圖結束，啟動 5 秒結算延遲測試...");
 
-            // 2. 啟動 5 秒延遲，等計分板隊名跳正
+            // 2. 啟動 5 秒延遲，等待計分板跳正
             AddTimer(5.0f, () => {
                 if (!isMatchLive) return;
 
                 int ctScore = 0, tScore = 0;
                 string currentCtName = "";
+                
+                // 3. 抓取數據
                 var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
                 foreach (var team in teams) {
                     if (team.TeamNum == 3) {
@@ -159,8 +161,10 @@ public partial class MatchZy
                 }
 
                 string winnerName = (s1 > s2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+
+                Log($"[MatchZy] 5秒延遲結束。判定贏家: {winnerName}。呼叫 EndSeries。");
                 
-                // 3. 呼叫 EndSeries，這會發出正確的第二則廣播並自動換圖
+                // 4. 呼叫結算流程 (會觸發正確廣播與換圖)
                 EndSeries(winnerName, 10, s1, s2);
             });
 
@@ -168,7 +172,7 @@ public partial class MatchZy
         }
         catch (Exception e)
         {
-            Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
+            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
             return HookResult.Continue;
         }
     }
@@ -390,18 +394,6 @@ public partial class MatchZy
             PrintToPlayerChat(player!, Localizer["matchzy.pracc.decoy", player!.PlayerName, $"{(DateTime.Now - thrownTime).TotalSeconds:0.00}"]);
             lastGrenadeThrownTime.Remove(@event.Entityid);
         }
-        return HookResult.Continue;
-    }
-    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
-    {
-        try {
-            HandlePostRoundStartEvent(@event);
-            return HookResult.Continue;
-        } catch { return HookResult.Continue; }
-    }
-
-    public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
-    {
         return HookResult.Continue;
     }
 }
