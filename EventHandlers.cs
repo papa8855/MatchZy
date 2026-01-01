@@ -95,44 +95,55 @@ public partial class MatchZy
 
     // --- 核心修正處：解決地圖結束換圖時，聊天室隊名反轉的問題 ---
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
-{
-    try
     {
-        if (!isMatchLive) return HookResult.Continue;
+        try
+        {
+            if (!isMatchLive) return HookResult.Continue;
 
-        int ctScore = 0;
-        int tScore = 0;
-        string currentCtName = "";
-        var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-        foreach (var team in teams) {
-            if (team.TeamNum == 3) {
-                ctScore = team.Score; 
-                currentCtName = team.Teamname; 
-            }
-            if (team.TeamNum == 2) tScore = team.Score;
+            // 加上 1.0f (1秒) 的延遲，確保最後一回合的分數與隊名在引擎中完全定格
+            AddTimer(1.0f, () => {
+                int ctScore = 0;
+                int tScore = 0;
+                string currentCtName = "";
+                
+                // 從引擎抓取最真實的物理數據
+                var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+                foreach (var team in teams) {
+                    if (team.TeamNum == 3) {
+                        ctScore = team.Score; 
+                        currentCtName = team.Teamname; 
+                    }
+                    if (team.TeamNum == 2) tScore = team.Score;
+                }
+
+                // 根據「目前的物理 CT 隊名」來進行分數與系統變數的對位
+                int sendT1, sendT2;
+                if (currentCtName == matchzyTeam1.teamName) {
+                    // 目前畫面的 CT 是系統的 Team1
+                    sendT1 = ctScore;
+                    sendT2 = tScore;
+                } else {
+                    // 目前畫面的 CT 是系統的 Team2
+                    sendT1 = tScore;
+                    sendT2 = ctScore;
+                }
+
+                // 算出正確的贏家名字
+                string winnerName = (sendT1 > sendT2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+
+                // 呼叫原本正常的 EndSeries 進行廣播與換圖
+                // 因為有了這 1 秒的緩衝，MatchManagement 就不會因為太快執行而錯亂
+                EndSeries(winnerName, 10, sendT1, sendT2);
+            });
+
+            return HookResult.Continue;
         }
-
-        // 判定傳給 EndSeries 的分數順序
-        // 如果現在的 CT 是 matchzyTeam1，那麼 t1score 就是 ctScore
-        int sendT1, sendT2;
-        if (currentCtName == matchzyTeam1.teamName) {
-            sendT1 = ctScore;
-            sendT2 = tScore;
-        } else {
-            sendT1 = tScore;
-            sendT2 = ctScore;
+        catch (Exception e)
+        {
+            Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
+            return HookResult.Continue;
         }
-
-        EndSeries(null, 10, sendT1, sendT2); // winnerName 傳 null 沒關係，EndSeries 會自己判定
-
-        return HookResult.Continue;
     }
-    catch (Exception e)
-    {
-        Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
-        return HookResult.Continue;
-    }
-}
 
     public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
     {
