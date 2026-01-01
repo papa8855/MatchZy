@@ -133,8 +133,10 @@ public partial class MatchZy
         {
             if (!isMatchLive) return HookResult.Continue;
 
-            // 增加到 5 秒延遲，確保計分板隊名已經完全跳正
-            // 同時不再呼叫原本的 HandleMatchEnd()，避免噴出第一則錯誤廣播
+            // 1. 移除 HandleMatchEnd(); 避免噴出第一則錯誤廣播
+            Log($"[MatchZy] 偵測到地圖結束，啟動 5 秒結算延遲測試...");
+
+            // 2. 啟動 5 秒延遲，等待計分板「跳正」
             AddTimer(5.0f, () => {
                 if (!isMatchLive) return;
 
@@ -142,31 +144,27 @@ public partial class MatchZy
                 int tScore = 0;
                 string currentCtName = "";
                 
-                // 1. 從引擎抓取此時此刻「正確」的隊名與分數
+                // 3. 從引擎抓取跳正後的正確數據
                 var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
                 foreach (var team in teams) {
-                    if (team.TeamNum == 3) { // CT 隊伍
+                    if (team.TeamNum == 3) {
                         ctScore = team.Score; 
                         currentCtName = team.Teamname; 
                     }
-                    if (team.TeamNum == 2) tScore = team.Score; // T 隊伍
+                    if (team.TeamNum == 2) tScore = team.Score;
                 }
 
-                // 2. 進行分數對位 (以 currentCtName 為基準)
-                int sendT1, sendT2;
+                // 4. 分數對位
+                int s1, s2;
                 if (currentCtName == matchzyTeam1.teamName) {
-                    sendT1 = ctScore; sendT2 = tScore;
+                    s1 = ctScore; s2 = tScore;
                 } else {
-                    sendT1 = tScore; sendT2 = ctScore;
+                    s1 = tScore; s2 = ctScore;
                 }
 
-                // 3. 算出真正贏家的名字
-                string winnerName = (sendT1 > sendT2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
-
-                // 4. 呼叫 EndSeries
-                // 這會觸發 MatchManagement.cs 裡的廣播與換圖邏輯
-                Log($"[MatchZy] 5秒延遲結束，正確贏家為: {winnerName}, 準備換圖。");
-                EndSeries(winnerName, 10, sendT1, sendT2);
+                // 5. 判定贏家並執行結算
+                string winnerName = (s1 > s2) ? matchzyTeam1.teamName : matchzyTeam2.teamName;
+                EndSeries(winnerName, 10, s1, s2);
             });
 
             return HookResult.Continue;
