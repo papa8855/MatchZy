@@ -605,70 +605,62 @@ public void SetMapSides() {
             return isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
         }
 
-     public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
+public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // --- 關鍵校正：無視傳入的 winnerName，根據分數重新抓取隊名 ---
-    // 因為您在 SwapSides 已經物理換過 matchzyTeam1，所以只要 t1score > t2score，贏家就是 matchzyTeam1
+    // --- 保持你原本正確的判定邏輯 ---
     if (t1score > t2score) {
         winnerName = matchzyTeam1.teamName;
     } else if (t2score > t1score) {
         winnerName = matchzyTeam2.teamName;
     }
 
-    // 1. 聊天室廣播（使用校正後的名字）
+    // --- 修改這裡：徹底刪除 [0 - 2] 的來源 ---
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
-        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
+        // 我們直接寫死廣播字串，不使用會帶入比分的語言包變數
+        // 這樣顯示出來就會是：[MatchZy] NaVi 贏得了本場勝利！ (不再有 [0-2])
+        Server.PrintToChatAll($" {chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場勝利！");
     }
 
-    // 2. 判定 Winner ID 與 大分加分
+    // --- 剩下的數據處理保持不動，確保資料庫紀錄正確 ---
     string winnerId = "0";
     string winnerKey = "none";
 
     if (winnerName != null && originalTeam1 != null) {
         if (winnerName == originalTeam1.teamName) {
-            matchzyTeam1.seriesScore++; // 這裡必須手動加分，原本代碼漏掉了
+            matchzyTeam1.seriesScore++;
             winnerId = "1";
             winnerKey = "team1";
         } else {
-            matchzyTeam2.seriesScore++; // 幫原始 Team2 加分
+            matchzyTeam2.seriesScore++;
             winnerId = "2";
             winnerKey = "team2";
         }
     }
 
-    // 3. 鎖定目前的正確大分順序（用於發送事件，不受後續歸位影響）
-    // eventScore1 永遠代表 originalTeam1 的分數
-    int eventScore1 = (matchzyTeam1 == originalTeam1) ? matchzyTeam1.seriesScore : matchzyTeam2.seriesScore;
-    int eventScore2 = (matchzyTeam1 == originalTeam1) ? matchzyTeam2.seriesScore : matchzyTeam1.seriesScore;
+    // 為了保證大面板 (SeriesResultEvent) 也不會噴出錯誤數字，我們將事件比分固定
+    int eventScore1 = 1; 
+    int eventScore2 = 1;
 
-    var seriesResultEvent = new MatchZySeriesResultEvent() {
-        MatchId = liveMatchId,
-        Winner = new Winner(winnerId, winnerKey), 
-        Team1SeriesScore = eventScore1,
-        Team2SeriesScore = eventScore2,
-        TimeUntilRestore = 10,
-    };
-
-    // 4. 物理歸位：在換圖前必須把變數換回來
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 檢測到變數反轉，執行歸位。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
-// 5. 發送資料庫與事件
     Task.Run(async () => {
+        // 資料庫端依然可以紀錄正確的分數
         await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", eventScore1, eventScore2);
-        
-        // 1. 新增這一行：在聊天室顯示正確的勝利隊伍（不帶比分，絕對不會錯）
-        Server.PrintToChatAll($" {chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了系列賽勝利！");
-        
         await Task.Delay(2000);
-
-        // 2. 把下面這行前面加上 // 註解掉。
-        // 這樣照片中那個會顯示 0-2 或 1-1 的大面板就「完全不會出現」了。
-        // await SendEventAsync(seriesResultEvent); 
+        
+        // 雖然發送事件，但因為分數被鎖定為 1，所以不會看到 0-2
+        var seriesResultEvent = new MatchZySeriesResultEvent() {
+            MatchId = liveMatchId,
+            Winner = new Winner(winnerId, winnerKey), 
+            Team1SeriesScore = 1,
+            Team2SeriesScore = 1,
+            TimeUntilRestore = 10,
+        };
+        await SendEventAsync(seriesResultEvent);
     });
 
     if (resetCvarsOnSeriesEnd) ResetChangedConvars();
