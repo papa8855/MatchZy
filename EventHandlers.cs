@@ -127,33 +127,34 @@ public partial class MatchZy
     }
 
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
+{
+    try
     {
-        try
-        {
-            HandleMatchEnd();
-            // ResetMatch();
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
-    }
+        // 1. 直接抓取 CS2 引擎當前的真實分數
+        int ctScore = GetTeamScore(CsTeam.CounterTerrorist);
+        int tScore = GetTeamScore(CsTeam.Terrorist);
 
-    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
-    {
-        try
-        {
-            HandlePostRoundStartEvent(@event);
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventRoundStart FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
+        // 2. 直接抓取伺服器當前的隊名 (這絕對不會錯)
+        string ctTeamName = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; // 通常 1 是 CT
+        string tTeamName = ConVar.Find("mp_teamname_2")?.StringValue ?? "";  // 通常 2 是 T
+
+        // 3. 判定贏家名字
+        string? realWinnerName = null;
+        if (ctScore > tScore) realWinnerName = ctTeamName;
+        else if (tScore > ctScore) realWinnerName = tTeamName;
+
+        // 4. 呼叫 EndSeries，傳入我們剛抓到的「真實數據」
+        // 我們強制把 t1score 給 ctScore，t2score 給 tScore
+        EndSeries(realWinnerName, 10, ctScore, tScore);
+
+        return HookResult.Continue;
     }
+    catch (Exception e)
+    {
+        Log($"[EventCsWinPanelMatchHandler FATAL] {e.Message}");
+        return HookResult.Continue;
+    }
+}
 
     public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
     {
