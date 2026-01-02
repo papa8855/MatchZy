@@ -556,16 +556,20 @@ public void SetMapSides() {
     reverseTeamSides["CT"] = matchzyTeam1;
     reverseTeamSides["TERRORIST"] = matchzyTeam2;
 
-    // 確保 JSON 配置也被覆寫，防止插件回頭讀取 "knife" 設定
-    if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count) {
-        matchConfig.MapSides[matchConfig.CurrentMapNumber] = (matchzyTeam1 == originalTeam1) ? "team1_ct" : "team2_ct";
+   // 確保 JSON 配置也被覆寫，防止插件回頭讀取 "knife" 設定導致第二回合名字回滾
+    if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count) 
+    {
+        // 判斷邏輯：如果目前 reverseTeamSides 字典裡紀錄的 CT 是 matchzyTeam1，就標記為 team1_ct
+        string newSideSetting = (reverseTeamSides["CT"] == matchzyTeam1) ? "team1_ct" : "team2_ct";
+
+        matchConfig.MapSides[matchConfig.CurrentMapNumber] = newSideSetting;
+        Log($"[MatchZy] 已將 JSON 陣營狀態覆寫為: {newSideSetting}");
     }
 
-    // 強制刷新引擎隊名
+    // 強制刷新引擎隊名，讓 CS2 顯示正確的名字
     SetTeamNames();
     Log($"[MatchZy] 換邊完成。目前的 CT 是: {matchzyTeam1.teamName}");
 }
-
         private CsTeam GetPlayerTeam(CCSPlayerController player)
         {
             if (!isMatchLive)
