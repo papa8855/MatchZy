@@ -1,8 +1,8 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
-using CounterStrikeSharp.API.Modules.Cvars;
-using CounterStrikeSharp.API.Modules.Utils;
+using CounterStrikeSharp.API.Modules.Cvars; // 解決 ConVar 報錯
+using CounterStrikeSharp.API.Modules.Entities; // 解決 Utilities 報錯
 
 namespace MatchZy;
 public partial class MatchZy
@@ -132,19 +132,30 @@ public partial class MatchZy
 {
     try
     {
-        // --- 這裡就是解決 GetTeamScore 找不到的方法：直接用 API 抓分數 ---
-        int ctScore = Utilities.GetTeamResourceByTeamNumber((int)CsTeam.CounterTerrorist)?.Score ?? 0;
-        int tScore = Utilities.GetTeamResourceByTeamNumber((int)CsTeam.Terrorist)?.Score ?? 0;
+        // 解決報錯：直接從 Server 實體抓取真實分數 (這是最穩定的做法)
+        int ctScore = 0;
+        int tScore = 0;
+        
+        // 抓取 CT 分數
+        var ctTeam = Utilities.GetTeams().FirstOrDefault(t => t.TeamNum == (byte)CsTeam.CounterTerrorist);
+        if (ctTeam != null) ctScore = ctTeam.Score;
 
-        // --- 這裡就是解決 ConVar 找不到的方法：確保上面有 using Cvars ---
-        string ctTeamName = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; 
-        string tTeamName = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
+        // 抓取 T 分數
+        var tTeam = Utilities.GetTeams().FirstOrDefault(t => t.TeamNum == (byte)CsTeam.Terrorist);
+        if (tTeam != null) tScore = tTeam.Score;
+
+        // 解決報錯：正確呼叫 ConVar
+        string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; 
+        string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
 
         string? realWinnerName = null;
-        if (ctScore > tScore) realWinnerName = ctTeamName;
-        else if (tScore > ctScore) realWinnerName = tTeamName;
+        if (ctScore > tScore) {
+            realWinnerName = reverseTeamSides.ContainsKey("CT") ? reverseTeamSides["CT"].teamName : name1;
+        } else if (tScore > ctScore) {
+            realWinnerName = reverseTeamSides.ContainsKey("TERRORIST") ? reverseTeamSides["TERRORIST"].teamName : name2;
+        }
 
-        // 呼叫 EndSeries
+        // 呼叫你的 EndSeries 函式
         EndSeries(realWinnerName, 10, ctScore, tScore);
 
         return HookResult.Continue;
