@@ -603,26 +603,42 @@ public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2s
 {
     // 這裡的 winnerName 是由 EventHandler 傳進來已經判定好的名字
     
-    // 修正：寫死廣播（封印比分顯示）
+    // 1. 修正廣播：寫死文字，徹底封死比分顯示
     if (winnerName != null) {
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
+    } else {
+        Server.PrintToChatAll($"{chatPrefix} 本場比賽結束，雙方平手！");
     }
 
-    // 修正：加分判定 (根據名字字串比對，不看物件索引)
-    if (winnerName == matchzyTeam1.teamName) {
-        matchzyTeam1.seriesScore++;
-    } else if (winnerName == matchzyTeam2.teamName) {
-        matchzyTeam2.seriesScore++;
+    // 2. 核心修正：加分判定 (根據傳入的贏家名字比對當前的 teamName)
+    // 這樣即使 matchzyTeam1 變成了 22 隊，只要 winnerName 是 "22"，分就會加給它。
+    if (winnerName != null) {
+        if (winnerName == matchzyTeam1.teamName) {
+            matchzyTeam1.seriesScore++;
+            Log($"[MatchZy] {matchzyTeam1.teamName} 大分累計: {matchzyTeam1.seriesScore}");
+        } else if (winnerName == matchzyTeam2.teamName) {
+            matchzyTeam2.seriesScore++;
+            Log($"[MatchZy] {matchzyTeam2.teamName} 大分累計: {matchzyTeam2.seriesScore}");
+        }
     }
 
-    // 修正：物理歸位 (換圖前必須要把變數對換回 JSON 初始狀態)
+    // 3. 物理歸位：換圖前必須要把變數對換回 JSON 載入時的初始狀態
+    // 這是為了讓 ResetMatch 載入 maplist[CurrentMapNumber] 時，順序是對的。
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
+        Log("[MatchZy] 檢測到變數對位反轉，正在執行 ResetMatch 前的物理歸位。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
     isMatchLive = false;
+    
+    // 更新資料庫
+    Task.Run(async () => {
+        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
+    });
+
+    // 只要大分 1:1，ResetMatch(false) 就會載入下一張地圖
     AddTimer(restartDelay, () => {
-        ResetMatch(false); // 只要大分 1:1，這裡就會換下一張圖
+        ResetMatch(false);
     });
 }
         public void HandlePlayoutConfig()
