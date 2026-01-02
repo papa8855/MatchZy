@@ -607,23 +607,21 @@ public void SetMapSides() {
 
 public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 1. 強制根據當前分數判定贏家名字，解決「判定錯誤」問題
+    // 1. 根據當前分數鎖定贏家名字，解決判定錯誤
     if (t1score > t2score) {
         winnerName = matchzyTeam1.teamName;
     } else if (t2score > t1score) {
         winnerName = matchzyTeam2.teamName;
     }
 
-    // 2. 聊天室廣播（移除所有比分變數 {1} {2}，僅顯示贏家）
+    // 2. 聊天室廣播：直接寫死，不給語言包任何帶入比分的機會
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
-        // 這裡直接寫死綠色字體顯示贏家，不給比分任何出現的機會
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場勝利！");
     }
 
-    // 3. 【核心修正】手動在大分 (Series Score) 加 1，確保能跑完 BO3
-    // 即使資料庫被刪除，這段代碼也會在換圖前將分數存入記憶體
+    // 3. 【核心修正】手動增加大分，確保 BO3 換圖正常
     if (winnerName != null) {
         if (winnerName == matchzyTeam1.teamName) {
             matchzyTeam1.seriesScore++; 
@@ -632,37 +630,26 @@ public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2s
         }
     }
 
-    // 取得當前校正後的大分數據
     int eventScore1 = matchzyTeam1.seriesScore;
     int eventScore2 = matchzyTeam2.seriesScore;
 
-    // 建立事件數據（用於同步 UI 或外部 API）
-    var seriesResultEvent = new MatchZySeriesResultEvent() {
-        MatchId = liveMatchId,
-        Winner = new Winner("0", "none"), 
-        Team1SeriesScore = eventScore1,
-        Team2SeriesScore = eventScore2,
-        TimeUntilRestore = 10,
-    };
-
-    // 4. 物理歸位：在換圖前確保 Team1/Team2 變數沒有反轉
+    // 4. 物理歸位
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 檢測到變數反轉，執行歸位。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
-    // 5. 非同步更新資料庫：將正確的大分寫回新生成的 matchzy.db
+    // 5. 資料庫同步
     Task.Run(async () => {
         await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", eventScore1, eventScore2);
         await Task.Delay(2000);
-        // 如果你不希望看到左下角噴出 0-2 的大面板 UI，請保持下一行的註解狀態
+        // 註解掉 SendEventAsync 以防止某些外部 UI 噴出比分
         // await SendEventAsync(seriesResultEvent); 
     });
 
     if (resetCvarsOnSeriesEnd) ResetChangedConvars();
     isMatchLive = false;
     
-    // 6. 觸發重置：這會根據剛才加完的 seriesScore 決定是「換圖打 BO3」還是「徹底結束」
+    // 6. 重置並進入下一張地圖
     AddTimer(restartDelay, () => {
         ResetMatch(false);
     });
