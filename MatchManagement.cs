@@ -607,21 +607,22 @@ public void SetMapSides() {
 
 public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 1. 根據當前分數鎖定贏家名字，解決判定錯誤
+    // --- 這裡放【判定邏輯】 ---
     if (t1score > t2score) {
         winnerName = matchzyTeam1.teamName;
     } else if (t2score > t1score) {
         winnerName = matchzyTeam2.teamName;
     }
 
-    // 2. 聊天室廣播：直接寫死，不給語言包任何帶入比分的機會
+    // --- 這裡放【關鍵 2：廣播文字】 ---
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
+        // 直接寫死這行
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場勝利！");
     }
 
-    // 3. 【核心修正】手動增加大分，確保 BO3 換圖正常
+    // --- 這裡放【關鍵 1：手動加分】 ---
     if (winnerName != null) {
         if (winnerName == matchzyTeam1.teamName) {
             matchzyTeam1.seriesScore++; 
