@@ -130,28 +130,32 @@ public partial class MatchZy
 {
     try
     {
-        // 1. 直接抓取 CS2 引擎當前的真實分數
+        // 1. 直接問 CS2 引擎目前的真實分數 (CT vs T)
         int ctScore = GetTeamScore(CsTeam.CounterTerrorist);
         int tScore = GetTeamScore(CsTeam.Terrorist);
 
-        // 2. 直接抓取伺服器當前的隊名 (這絕對不會錯)
-        string ctTeamName = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; // 通常 1 是 CT
-        string tTeamName = ConVar.Find("mp_teamname_2")?.StringValue ?? "";  // 通常 2 是 T
+        // 2. 直接從伺服器變數 (ConVar) 抓目前顯示的名字
+        // 在 MatchZy 中，mp_teamname_1 固定給 Team1，mp_teamname_2 固定給 Team2
+        string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; 
+        string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
 
-        // 3. 判定贏家名字
-        string? realWinnerName = null;
-        if (ctScore > tScore) realWinnerName = ctTeamName;
-        else if (tScore > ctScore) realWinnerName = tTeamName;
+        // 3. 判定誰分高
+        string? winnerName = null;
+        if (ctScore > tScore) {
+            // 如果 CT 分高，我們看現在哪個隊伍的名字對應到 CT 陣營
+            winnerName = (reverseTeamSides["CT"].teamName); 
+        } else if (tScore > ctScore) {
+            winnerName = (reverseTeamSides["TERRORIST"].teamName);
+        }
 
-        // 4. 呼叫 EndSeries，傳入我們剛抓到的「真實數據」
-        // 我們強制把 t1score 給 ctScore，t2score 給 tScore
-        EndSeries(realWinnerName, 10, ctScore, tScore);
+        // 4. 呼叫 EndSeries，傳入我們親自校正過的數據
+        EndSeries(winnerName, 10, ctScore, tScore);
 
         return HookResult.Continue;
     }
     catch (Exception e)
     {
-        Log($"[EventCsWinPanelMatchHandler FATAL] {e.Message}");
+        Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
         return HookResult.Continue;
     }
 }
