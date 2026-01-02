@@ -3,8 +3,10 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
 using CounterStrikeSharp.API.Modules.Cvars; // 解決 ConVar 報錯
 using CounterStrikeSharp.API.Modules.Entities; // 解決 Utilities 報錯
+using System.Linq;
 
 namespace MatchZy;
+
 public partial class MatchZy
 {
     public HookResult EventPlayerConnectFullHandler(EventPlayerConnectFull @event, GameEventInfo info)
@@ -50,13 +52,8 @@ public partial class MatchZy
                     playerReadyStatus[player.UserId.Value] = true;
                 }
             }
-            // May not be required, but just to be on safe side so that player data is properly updated in dictionaries
-            // Update: Commenting the below function as it was being called multiple times on map change.
-            // UpdatePlayersMap();
-
             if (readyAvailable && !matchStarted)
             {
-                // Start Warmup when first player connect and match is not started.
                 if (GetRealPlayersCount() == 1)
                 {
                     Log($"[FULL CONNECT] First player has connected, starting warmup!");
@@ -65,15 +62,14 @@ public partial class MatchZy
                 }
             }
             return HookResult.Continue;
-
         }
         catch (Exception e)
         {
             Log($"[EventPlayerConnectFull FATAL] An error occurred: {e.Message}");
             return HookResult.Continue;
         }
-
     }
+
     public HookResult EventPlayerDisconnectHandler(EventPlayerDisconnect @event, GameEventInfo info)
     {
         try
@@ -118,54 +114,57 @@ public partial class MatchZy
 
     public HookResult EventCsWinPanelRoundHandler(EventCsWinPanelRound @event, GameEventInfo info)
     {
-        // EventCsWinPanelRound has stopped firing after Arms Race update, hence we handle knife round winner in EventRoundEnd.
-
-        // Log($"[EventCsWinPanelRound PRE] finalEvent: {@event.FinalEvent}");
-        // if (isKnifeRound && matchStarted)
-        // {
-        //     HandleKnifeWinner(@event);
-        // }
         return HookResult.Continue;
     }
 
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
-{
-    try
     {
-        // 解決報錯：直接從 Server 實體抓取真實分數 (這是最穩定的做法)
-        int ctScore = 0;
-        int tScore = 0;
-        
-        // 抓取 CT 分數
-        var ctTeam = Utilities.GetTeams().FirstOrDefault(t => t.TeamNum == (byte)CsTeam.CounterTerrorist);
-        if (ctTeam != null) ctScore = ctTeam.Score;
+        try
+        {
+            // 修正 11 贏顯示 22 的核心邏輯：直接抓取 Server 真實數據
+            int ctScore = 0;
+            int tScore = 0;
+            
+            var teams = Utilities.GetTeams();
+            foreach (var team in teams) {
+                if (team.TeamNum == (byte)CsTeam.CounterTerrorist) ctScore = team.Score;
+                else if (team.TeamNum == (byte)CsTeam.Terrorist) tScore = team.Score;
+            }
 
-        // 抓取 T 分數
-        var tTeam = Utilities.GetTeams().FirstOrDefault(t => t.TeamNum == (byte)CsTeam.Terrorist);
-        if (tTeam != null) tScore = tTeam.Score;
+            // 抓取 ConVar 設定的隊名
+            string ctName = ConVar.Find("mp_teamname_1")?.StringValue ?? "";
+            string tName = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
+            
+            string? winnerName = null;
+            if (ctScore > tScore) winnerName = ctName;
+            else if (tScore > ctScore) winnerName = tName;
 
-        // 解決報錯：正確呼叫 ConVar
-        string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; 
-        string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
+            // 執行地圖結束邏輯
+            EndSeries(winnerName, 10, ctScore, tScore);
 
-        string? realWinnerName = null;
-        if (ctScore > tScore) {
-            realWinnerName = reverseTeamSides.ContainsKey("CT") ? reverseTeamSides["CT"].teamName : name1;
-        } else if (tScore > ctScore) {
-            realWinnerName = reverseTeamSides.ContainsKey("TERRORIST") ? reverseTeamSides["TERRORIST"].teamName : name2;
+            return HookResult.Continue;
         }
-
-        // 呼叫你的 EndSeries 函式
-        EndSeries(realWinnerName, 10, ctScore, tScore);
-
-        return HookResult.Continue;
+        catch (Exception e)
+        {
+            Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
+            return HookResult.Continue;
+        }
     }
-    catch (Exception e)
+
+    // --- 在此處補上缺失的 EventRoundStartHandler 解決編譯錯誤 ---
+    public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
     {
-        Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
-        return HookResult.Continue;
+        try
+        {
+            HandlePostRoundStartEvent(@event);
+            return HookResult.Continue;
+        }
+        catch (Exception e)
+        {
+            Log($"[EventRoundStart FATAL] {e.Message}");
+            return HookResult.Continue;
+        }
     }
-}
 
     public HookResult EventRoundFreezeEndHandler(EventRoundFreezeEnd @event, GameEventInfo info)
     {
@@ -177,7 +176,6 @@ public partial class MatchZy
             foreach (var coach in coaches)
             {
                 if (!IsPlayerValid(coach)) continue;
-                // If coaches are still left alive after freezetime ends, this code will force them to spectate their team again.
                 if (coach.PlayerPawn.Value?.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
 
                 Position coachPosition = new(coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsOrigin, coach.PlayerPawn.Value!.CBodyComponent!.SceneNode!.AbsRotation);
@@ -205,7 +203,6 @@ public partial class MatchZy
             if (@event.Userid == null) return HookResult.Continue;
             var recv = @event.Userid;
 
-            // check if coach
             var coaches = reverseTeamSides["TERRORIST"].coach;
             if (coaches.Contains(recv)) {
                 TransferCoachBomb(recv);
@@ -290,7 +287,6 @@ public partial class MatchZy
     {
         try
         {
-            // We do not broadcast the suicide of the coach
             if (!matchStarted) return HookResult.Continue;
 
             if (@event.Attacker == @event.Userid)
