@@ -127,19 +127,21 @@ public partial class MatchZy
     }
 
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
-    {
-        try
-        {
-            HandleMatchEnd();
-            // ResetMatch();
-            return HookResult.Continue;
-        }
-        catch (Exception e)
-        {
-            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
-            return HookResult.Continue;
-        }
+{
+    try {
+        // 直接呼叫 Utility 裡的判定，它現在會根據 mp_teamname 抓取正確名字
+        string winnerName = GetMatchWinnerName(); 
+        (int t1, int t2) = GetTeamsScore();
+
+        // 呼叫我們剛剛修正後的 EndSeries
+        EndSeries(winnerName, 10, t1, t2);
+
+        return HookResult.Continue;
+    } catch (Exception e) {
+        Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
+        return HookResult.Continue;
     }
+}
 
     public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
     {
