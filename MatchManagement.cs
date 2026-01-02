@@ -599,44 +599,56 @@ public void SetMapSides() {
             return isWhitelistRequired ? CsTeam.None : (CsTeam)player.TeamNum;
         }
 
-public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
+        public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 這裡的 winnerName 是由 EventHandler 傳進來已經判定好的名字
-    
-    // 1. 修正廣播：寫死文字，徹底封死比分顯示
-    if (winnerName != null) {
-        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
+    // 1. 廣播正確的贏家名字
+    if (winnerName == null) {
+        Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
-        Server.PrintToChatAll($"{chatPrefix} 本場比賽結束，雙方平手！");
+        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
     }
 
-    // 2. 核心修正：加分判定 (根據傳入的贏家名字比對當前的 teamName)
-    // 這樣即使 matchzyTeam1 變成了 22 隊，只要 winnerName 是 "22"，分就會加給它。
+    // 2. 核心修正：判斷大分應該加在誰身上
+    // 這裡不看 team1/team2 變數，直接看名字比對
     if (winnerName != null) {
         if (winnerName == matchzyTeam1.teamName) {
             matchzyTeam1.seriesScore++;
-            Log($"[MatchZy] {matchzyTeam1.teamName} 大分累計: {matchzyTeam1.seriesScore}");
         } else if (winnerName == matchzyTeam2.teamName) {
             matchzyTeam2.seriesScore++;
-            Log($"[MatchZy] {matchzyTeam2.teamName} 大分累計: {matchzyTeam2.seriesScore}");
         }
     }
 
-    // 3. 物理歸位：換圖前必須要把變數對換回 JSON 載入時的初始狀態
-    // 這是為了讓 ResetMatch 載入 maplist[CurrentMapNumber] 時，順序是對的。
+// 3. 換圖前的「歸位」邏輯
+    // 我們直接檢查：目前的 matchzyTeam1 是否已經不是「原始」的那一隊了
+    // 如果 originalTeam1 已經被我們換到 matchzyTeam2 去了，就代表現在是反轉狀態
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 檢測到變數對位反轉，正在執行 ResetMatch 前的物理歸位。");
+        Log("[MatchZy] 檢測到變數對位反轉，正在執行物理歸位以確保下一場地圖正確。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
-    isMatchLive = false;
-    
-    // 更新資料庫
+    // 4. 發送事件 (這會影響你的 Discord 推播訊息)
+    string winnerId = "0";
+    if (winnerName == matchzyTeam1.teamName) winnerId = "1";
+    else if (winnerName == matchzyTeam2.teamName) winnerId = "2";
+
+    var seriesResultEvent = new MatchZySeriesResultEvent() {
+        MatchId = liveMatchId,
+        Winner = new Winner(winnerId, winnerId == "1" ? "team1" : "team2"),
+        Team1SeriesScore = matchzyTeam1.seriesScore,
+        Team2SeriesScore = matchzyTeam2.seriesScore,
+        TimeUntilRestore = 10,
+    };
+
     Task.Run(async () => {
         await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
+        await Task.Delay(2000);
+        await SendEventAsync(seriesResultEvent);
     });
 
-    // 只要大分 1:1，ResetMatch(false) 就會載入下一張地圖
+    if (resetCvarsOnSeriesEnd) ResetChangedConvars();
+    isMatchLive = false;
+
+    // 延遲執行換圖或重置
     AddTimer(restartDelay, () => {
         ResetMatch(false);
     });
