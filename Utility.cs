@@ -981,40 +981,60 @@ namespace MatchZy
             });
         }
 
+ // --- 修正版：直接從伺服器 ConVar 抓取隊名，確保 100% 判定正確 ---
+        private string GetMatchWinnerName()
+        {
+            (int t1score, int t2score) = GetTeamsScore();
+            // 直接抓取伺服器當前顯示的隊名，這會隨換邊自動更新
+            string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? matchzyTeam1.teamName;
+            string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? matchzyTeam2.teamName;
 
+            if (t1score > t2score)
+            {
+                return name1; // 左邊分數高，回傳左邊隊伍的名字
+            }
+            else if (t2score > t1score)
+            {
+                return name2; // 右邊分數高，回傳右邊隊伍的名字
+            }
+            else
+            {
+                return "Draw";
+            }
         }
 
-        // --- 只留下這一段修正版 ---
-private string GetMatchWinnerName()
-{
-    (int t1score, int t2score) = GetTeamsScore();
-    string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? matchzyTeam1.teamName;
-    string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? matchzyTeam2.teamName;
+        // --- 修正版：改用 CCSTeam 實體抓取真實比分，避開 API 版本相容性問題 ---
+        private (int t1score, int t2score) GetTeamsScore()
+        {
+            var teamEntities = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+            int t1score = 0;
+            int t2score = 0;
 
-    if (t1score > t2score) return name1;
-    else if (t2score > t1score) return name2;
-    else return "Draw";
-}
+            // 抓取伺服器 ConVar 目前顯示的名字，用來對應分數
+            string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? "";
+            string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
 
-private (int t1score, int t2score) GetTeamsScore()
-{
-    var teamEntities = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-    int t1score = 0;
-    int t2score = 0;
-
-    string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? "";
-    string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
-
-    foreach (var team in teamEntities)
-    {
-        if (team.Teamname == name1) t1score = team.Score;
-        else if (team.Teamname == name2) t2score = team.Score;
-    }
-    return (t1score, t2score);
-}
+            foreach (var team in teamEntities)
+            {
+                if (team.Teamname == name1)
+                {
+                    t1score = team.Score;
+                }
+                else if (team.Teamname == name2)
+                {
+                    t2score = team.Score;
+                }
+            }
+            return (t1score, t2score);
         }
 
-        
+        private int GetRoundNumer()
+        {
+            (int t1score, int t2score) = GetTeamsScore();
+
+            return t1score + t2score;
+        }
+
         public void HandlePostRoundStartEvent(EventRoundStart @event)
         {
             if (isDryRun) RandomizeSpawns();
