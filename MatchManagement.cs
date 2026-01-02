@@ -548,28 +548,29 @@ public void SetMapSides() {
         }
 
         // --- 修正處 4：換邊處理，正確覆寫記憶體內的 JSON 配置以防回滾 ---
-        public void SwapSidesInTeamData(bool swapTeams) {
+        // 建議直接將這段代碼取代原有的 SwapSidesInTeamData 函式
+public void SwapSidesInTeamData(bool swapTeams) {
     if (swapTeams) {
         // 核心修正：直接交換 Team 物件，確保邏輯與物理位置同步
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
+    // 更新映射關係，確保插件知道現在哪一隊是 CT
     teamSides[matchzyTeam1] = "CT";
     teamSides[matchzyTeam2] = "TERRORIST";
-    reverseTeamSides["CT"] = matchzyTeam1;
-    reverseTeamSides["TERRORIST"] = matchzyTeam2;
+    reverseTeamSides["CT"] = (teamSides[matchzyTeam1] == "CT") ? matchzyTeam1 : matchzyTeam2;
+    reverseTeamSides["TERRORIST"] = (teamSides[matchzyTeam1] == "TERRORIST") ? matchzyTeam1 : matchzyTeam2;
 
-   // 確保 JSON 配置也被覆寫，防止插件回頭讀取 "knife" 設定導致第二回合名字回滾
+    // 關鍵修正：覆寫 JSON 配置。這能防止插件在換圖或檢查狀態時讀回原始的 JSON "knife" 或舊設定
     if (matchConfig.MapSides != null && matchConfig.CurrentMapNumber >= 0 && matchConfig.CurrentMapNumber < matchConfig.MapSides.Count) 
     {
-        // 判斷邏輯：如果目前 reverseTeamSides 字典裡紀錄的 CT 是 matchzyTeam1，就標記為 team1_ct
+        // 判斷目前 CT 陣營對應的是哪一隊，並將其寫回 Config，防止隊名回滾
         string newSideSetting = (reverseTeamSides["CT"] == matchzyTeam1) ? "team1_ct" : "team2_ct";
-
         matchConfig.MapSides[matchConfig.CurrentMapNumber] = newSideSetting;
         Log($"[MatchZy] 已將 JSON 陣營狀態覆寫為: {newSideSetting}");
     }
 
-    // 強制刷新引擎隊名，讓 CS2 顯示正確的名字
+    // 強制刷新引擎隊名，讓 CS2 的 scoreboard 顯示正確的名字
     SetTeamNames();
     Log($"[MatchZy] 換邊完成。目前的 CT 是: {matchzyTeam1.teamName}");
 }
@@ -601,31 +602,33 @@ public void SetMapSides() {
 
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 1. 廣播正確的贏家名字
+    // 1. 廣播贏家
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
     }
 
-    // 2. 核心修正：判斷大分應該加在誰身上
-    // 這裡不看 team1/team2 變數，直接看名字比對
+    // 2. 【核心修正】判定大分歸屬
+    // 不要只依賴 winnerName 變數，改用「贏家陣營」來找對應的 Team 物件
     if (winnerName != null) {
+        // 這裡 matchzyTeam1 和 matchzyTeam2 是物件參考
+        // 我們判斷哪一個隊伍的名字與贏家相同
         if (winnerName == matchzyTeam1.teamName) {
             matchzyTeam1.seriesScore++;
+            Log($"[MatchZy] 地圖結束，點數增加給 Team1: {matchzyTeam1.teamName}, 目前大分: {matchzyTeam1.seriesScore}");
         } else if (winnerName == matchzyTeam2.teamName) {
             matchzyTeam2.seriesScore++;
+            Log($"[MatchZy] 地圖結束，點數增加給 Team2: {matchzyTeam2.teamName}, 目前大分: {matchzyTeam2.seriesScore}");
         }
     }
 
-// 3. 換圖前的「歸位」邏輯
-    // 我們直接檢查：目前的 matchzyTeam1 是否已經不是「原始」的那一隊了
-    // 如果 originalTeam1 已經被我們換到 matchzyTeam2 去了，就代表現在是反轉狀態
+    // 3. 【關鍵修正】物理歸位：確保下一張圖開始時，Team1 變數回到初始位置
+    // 如果不歸位，第二張圖開始時 team1/team2 指向會是反的，導致判斷混亂
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 檢測到變數對位反轉，正在執行物理歸位以確保下一場地圖正確。");
+        Log("[MatchZy] 檢測到物件對位反轉，正在執行物理歸位以確保下一場地圖邏輯正確。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
-
     // 4. 發送事件 (這會影響你的 Discord 推播訊息)
     string winnerId = "0";
     if (winnerName == matchzyTeam1.teamName) winnerId = "1";
