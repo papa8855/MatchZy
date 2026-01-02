@@ -981,21 +981,18 @@ namespace MatchZy
             });
         }
 
- // --- 修正版：直接從伺服器 ConVar 抓取隊名，確保 100% 判定正確 ---
         private string GetMatchWinnerName()
         {
             (int t1score, int t2score) = GetTeamsScore();
-            // 直接抓取伺服器當前顯示的隊名，這會隨換邊自動更新
-            string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? matchzyTeam1.teamName;
-            string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? matchzyTeam2.teamName;
-
             if (t1score > t2score)
             {
-                return name1; // 左邊分數高，回傳左邊隊伍的名字
+                matchzyTeam1.seriesScore++;
+                return matchzyTeam1.teamName;
             }
             else if (t2score > t1score)
             {
-                return name2; // 右邊分數高，回傳右邊隊伍的名字
+                matchzyTeam2.seriesScore++;
+                return matchzyTeam2.teamName;
             }
             else
             {
@@ -1003,24 +1000,18 @@ namespace MatchZy
             }
         }
 
-        // --- 修正版：改用 CCSTeam 實體抓取真實比分，避開 API 版本相容性問題 ---
         private (int t1score, int t2score) GetTeamsScore()
         {
             var teamEntities = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
             int t1score = 0;
             int t2score = 0;
-
-            // 抓取伺服器 ConVar 目前顯示的名字，用來對應分數
-            string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? "";
-            string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
-
             foreach (var team in teamEntities)
             {
-                if (team.Teamname == name1)
+                if (team.Teamname == teamSides[matchzyTeam1])
                 {
                     t1score = team.Score;
                 }
-                else if (team.Teamname == name2)
+                else if (team.Teamname == teamSides[matchzyTeam2])
                 {
                     t2score = team.Score;
                 }
