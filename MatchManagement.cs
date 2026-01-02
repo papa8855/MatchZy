@@ -601,24 +601,24 @@ public void SetMapSides() {
 
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 1. 判定大分：不看隊伍順序，直接比對名字字串
+    // 關鍵：比對名字字串，名字是 "11" 就給 matchzyTeam1 加分
     if (winnerName != null) {
-        // 如果贏家名字等於 11 隊原本的名字，就給 Team1 加分
         if (winnerName == matchzyTeam1.teamName) {
-            matchzyTeam1.seriesScore++;
+            matchzyTeam1.seriesScore++; // 確實加給 11 隊
             Log($"[MatchZy] {matchzyTeam1.teamName} 大分累計: {matchzyTeam1.seriesScore}");
         } else if (winnerName == matchzyTeam2.teamName) {
-            matchzyTeam2.seriesScore++;
+            matchzyTeam2.seriesScore++; // 確實加給 22 隊
             Log($"[MatchZy] {matchzyTeam2.teamName} 大分累計: {matchzyTeam2.seriesScore}");
         }
     }
 
-    // 2. 停止當機：確保這裡沒有任何「物件對調」的代碼
+    // --- 絕對不寫對調物件的代碼 (matchzyTeam1, matchzyTeam2) = ... 避免當機 ---
+
     isMatchLive = false;
     
-    // 3. 執行換圖流程 (維持前天能用的 ResetMatch)
+    // 執行換圖流程
     AddTimer(restartDelay, () => {
-        ResetMatch(false);
+        ResetMatch(false); //
     });
 }
         public void HandlePlayoutConfig()
