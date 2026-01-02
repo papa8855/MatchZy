@@ -92,28 +92,36 @@ public partial class MatchZy
         }
     }
 
-    public HookResult EventCsWinPanelRoundHandler(EventCsWinPanelRound @event, GameEventInfo info) => HookResult.Continue;
+    public HookResult EventCsWinPanelRoundHandler(EventCsWinPanelRound @event, GameEventInfo info)
+    {
+        // 修正：使用標準格式，目前不需要處理此事件，直接回傳繼續
+        return HookResult.Continue;
+    }
 
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
     {
         try
         {
-            // 使用最相容的實體抓取方式，解決 Utilities.GetTeams 報錯
+            // 修正：改用 FindAllEntitiesByDesignerName，解決 Utilities.GetEntities 報錯
             int ctScore = 0;
             int tScore = 0;
-            var teams = Utilities.GetEntities<CCSTeam>();
+            
+            // 與 Utility.cs 保持一致，抓取 cs_team_manager
+            var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
             foreach (var team in teams) {
                 if (team.TeamNum == (byte)CsTeam.CounterTerrorist) ctScore = team.Score;
                 else if (team.TeamNum == (byte)CsTeam.Terrorist) tScore = team.Score;
             }
 
-            // 直接抓取 ConVar 確保贏家名字隨換邊更新
+            // 抓取伺服器目前隊名，解決換邊反轉問題
             string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; 
             string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
             
-            string? realWinnerName = (ctScore > tScore) ? name1 : (tScore > ctScore ? name2 : null);
+            string? realWinnerName = null;
+            if (ctScore > tScore) realWinnerName = name1;
+            else if (tScore > ctScore) realWinnerName = name2;
 
-            // 呼叫修正後的 EndSeries
+            // 呼叫 EndSeries
             EndSeries(realWinnerName, 10, ctScore, tScore);
 
             return HookResult.Continue;
