@@ -121,26 +121,31 @@ public partial class MatchZy
     {
         try
         {
-            // 修正 11 贏顯示 22 的核心邏輯：直接抓取 Server 真實數據
+            // --- 修正判定邏輯：直接向伺服器核心抓取數據 ---
             int ctScore = 0;
             int tScore = 0;
             
+            // 抓取伺服器當前的真實比分
             var teams = Utilities.GetTeams();
             foreach (var team in teams) {
                 if (team.TeamNum == (byte)CsTeam.CounterTerrorist) ctScore = team.Score;
                 else if (team.TeamNum == (byte)CsTeam.Terrorist) tScore = team.Score;
             }
 
-            // 抓取 ConVar 設定的隊名
+            // 抓取 ConVar 裡當前左/右兩邊顯示的隊伍名稱
             string ctName = ConVar.Find("mp_teamname_1")?.StringValue ?? "";
             string tName = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
             
-            string? winnerName = null;
-            if (ctScore > tScore) winnerName = ctName;
-            else if (tScore > ctScore) winnerName = tName;
+            string? realWinnerName = null;
+            if (ctScore > tScore) {
+                realWinnerName = ctName;
+            } else if (tScore > ctScore) {
+                realWinnerName = tName;
+            }
 
-            // 執行地圖結束邏輯
-            EndSeries(winnerName, 10, ctScore, tScore);
+            // 呼叫 EndSeries，傳入我們親自校正過的贏家名字
+            // 注意：t1score 這裡我們傳入當前 matchzyTeam1 的分數以維持相容性
+            EndSeries(realWinnerName, 10, ctScore, tScore);
 
             return HookResult.Continue;
         }
