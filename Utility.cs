@@ -1000,30 +1000,50 @@ namespace MatchZy
             }
         }
 
+        private string GetMatchWinnerName()
+        {
+            (int t1score, int t2score) = GetTeamsScore();
+            // 直接抓取伺服器變數，確保換邊後名字依然正確
+            string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? matchzyTeam1.teamName;
+            string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? matchzyTeam2.teamName;
+
+            if (t1score > t2score)
+            {
+                return name1; // 左邊分高就是左邊隊贏
+            }
+            else if (t2score > t1score)
+            {
+                return name2; // 右邊分高就是右邊隊贏
+            }
+            else
+            {
+                return "Draw";
+            }
+        }
+
         private (int t1score, int t2score) GetTeamsScore()
         {
+            // 使用最相容的實體抓取方式，解決 Utilities.GetTeams 報錯
             var teamEntities = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
             int t1score = 0;
             int t2score = 0;
+
+            // 抓取伺服器當前的顯示隊名
+            string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? "";
+            string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
+
             foreach (var team in teamEntities)
             {
-                if (team.Teamname == teamSides[matchzyTeam1])
+                if (team.Teamname == name1)
                 {
                     t1score = team.Score;
                 }
-                else if (team.Teamname == teamSides[matchzyTeam2])
+                else if (team.Teamname == name2)
                 {
                     t2score = team.Score;
                 }
             }
             return (t1score, t2score);
-        }
-
-        private int GetRoundNumer()
-        {
-            (int t1score, int t2score) = GetTeamsScore();
-
-            return t1score + t2score;
         }
 
         public void HandlePostRoundStartEvent(EventRoundStart @event)
