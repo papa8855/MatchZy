@@ -91,9 +91,8 @@ namespace MatchZy
 
             // This sets default config ConVars
             Server.ExecuteCommand("execifexists MatchZy/config.cfg");
-            Localizer["matchzy.round.map_winner"] = "";
-            Localizer["matchzy.round.series_winner"] = "";
-            Localizer["matchzy.round.score"] = "";
+
+            // 移除 Localizer 賦值以修正編譯錯誤
             teamSides[matchzyTeam1] = "CT";
             teamSides[matchzyTeam2] = "TERRORIST";
 			matchzyTeam1.teamName = ""; 
@@ -304,7 +303,10 @@ AddCommandListener("jointeam", (player, info) =>
                         return HookResult.Continue;
                     }
                     if (!isMatchLive) return HookResult.Continue;
-                //  HandlePostRoundEndEvent(        
+                    
+                    // 註釋掉此行以隱藏回合結束的比分廣播
+                    // HandlePostRoundEndEvent(@event); 
+                           
                     return HookResult.Continue;
                 }
                 catch (Exception e)
