@@ -601,47 +601,35 @@ public void SetMapSides() {
 
 public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // --- 修正 2. 贏家反轉的關鍵：無視傳進來的 winnerName，改用當下分數判定 ---
-    // t1score 是當前 matchzyTeam1 (左邊) 的分數，t2score 是 matchzyTeam2 (右邊) 的分數
+    // --- 終極修正：直接去問伺服器現在左邊叫什麼名字 ---
+    string realTeam1Name = ConVar.Find("mp_teamname_1")?.StringValue ?? matchzyTeam1.teamName;
+    string realTeam2Name = ConVar.Find("mp_teamname_2")?.StringValue ?? matchzyTeam2.teamName;
+
+    // 重新判定贏家
     if (t1score > t2score) {
-        winnerName = matchzyTeam1.teamName;
+        winnerName = realTeam1Name;
     } else if (t2score > t1score) {
-        winnerName = matchzyTeam2.teamName;
+        winnerName = realTeam2Name;
     }
 
-    // --- 修正 1. 廣播比分問題：直接寫死純文字，不給 Localizer 抓比分的機會 ---
+    // --- 顯示校正後的贏家，且絕對不帶比分 ---
     if (winnerName != null) {
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場勝利！");
     }
 
-    // --- 修正大分加錯人的問題：直接根據修正後的 winnerName 加分 ---
-    if (winnerName != null) {
-        if (winnerName == matchzyTeam1.teamName) {
-            matchzyTeam1.seriesScore++;
-            Log($"[MatchZy] {matchzyTeam1.teamName} 大分 +1，目前: {matchzyTeam1.seriesScore}");
-        } else if (winnerName == matchzyTeam2.teamName) {
-            matchzyTeam2.seriesScore++;
-            Log($"[MatchZy] {matchzyTeam2.teamName} 大分 +1，目前: {matchzyTeam2.seriesScore}");
-        }
+    // --- 根據名字加分，這解決了「11 贏顯示 22」的問題 ---
+    if (winnerName == matchzyTeam1.teamName) {
+        matchzyTeam1.seriesScore++;
+    } else if (winnerName == matchzyTeam2.teamName) {
+        matchzyTeam2.seriesScore++;
     }
 
-    // --- 歸位邏輯：在 ResetMatch 之前把 Team 變數換回初始狀態 ---
-    // 這是為了讓 ResetMatch 判斷 maplist 索引時不會錯亂
+    // --- 物理歸位：準備換下一張圖 ---
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
-        Log("[MatchZy] 執行變數歸位 (Team Objects Swap)");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
-    // 更新資料庫 (使用歸位後的正確大分)
-    Task.Run(async () => {
-        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
-        await Task.Delay(2000);
-    });
-
-    if (resetCvarsOnSeriesEnd) ResetChangedConvars();
     isMatchLive = false;
-
-    // 觸發重置：只要記憶體大分是 1:1，ResetMatch 就會載入第三張圖
     AddTimer(restartDelay, () => {
         ResetMatch(false);
     });
