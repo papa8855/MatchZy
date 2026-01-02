@@ -601,37 +601,28 @@ public void SetMapSides() {
 
 public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // --- 終極修正：直接去問伺服器現在左邊叫什麼名字 ---
-    string realTeam1Name = ConVar.Find("mp_teamname_1")?.StringValue ?? matchzyTeam1.teamName;
-    string realTeam2Name = ConVar.Find("mp_teamname_2")?.StringValue ?? matchzyTeam2.teamName;
-
-    // 重新判定贏家
-    if (t1score > t2score) {
-        winnerName = realTeam1Name;
-    } else if (t2score > t1score) {
-        winnerName = realTeam2Name;
-    }
-
-    // --- 顯示校正後的贏家，且絕對不帶比分 ---
+    // 這裡的 winnerName 是由 EventHandler 傳進來已經判定好的名字
+    
+    // 修正：寫死廣播（封印比分顯示）
     if (winnerName != null) {
-        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場勝利！");
+        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
     }
 
-    // --- 根據名字加分，這解決了「11 贏顯示 22」的問題 ---
+    // 修正：加分判定 (根據名字字串比對，不看物件索引)
     if (winnerName == matchzyTeam1.teamName) {
         matchzyTeam1.seriesScore++;
     } else if (winnerName == matchzyTeam2.teamName) {
         matchzyTeam2.seriesScore++;
     }
 
-    // --- 物理歸位：準備換下一張圖 ---
+    // 修正：物理歸位 (換圖前必須要把變數對換回 JSON 初始狀態)
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
 
     isMatchLive = false;
     AddTimer(restartDelay, () => {
-        ResetMatch(false);
+        ResetMatch(false); // 只要大分 1:1，這裡就會換下一張圖
     });
 }
         public void HandlePlayoutConfig()
