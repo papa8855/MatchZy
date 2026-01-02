@@ -1,7 +1,6 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
-using CounterStrikeSharp.API.Modules.Cvars;
 
 namespace MatchZy;
 public partial class MatchZy
@@ -128,32 +127,20 @@ public partial class MatchZy
     }
 
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
-{
-    try {
-        int ctScore = 0;
-        int tScore = 0;
-        // 抓取伺服器當前的真實比分
-        var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
-        foreach (var team in teams) {
-            if (team.TeamNum == (byte)CsTeam.CounterTerrorist) ctScore = team.Score;
-            else if (team.TeamNum == (byte)CsTeam.Terrorist) tScore = team.Score;
+    {
+        try
+        {
+            HandleMatchEnd();
+            // ResetMatch();
+            return HookResult.Continue;
         }
-
-        // 核心：直接抓取伺服器目前畫面上顯示的隊名
-        string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; 
-        string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
-        
-        // 如果 CT 分高，贏家就是目前在 CT 的名字 (name1)；反之亦然
-        string? realWinner = (ctScore > tScore) ? name1 : (tScore > ctScore ? name2 : null);
-
-        // 將正確的名字傳給 EndSeries
-        EndSeries(realWinner, 10, ctScore, tScore);
-        return HookResult.Continue;
-    } catch (Exception e) {
-        Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
-        return HookResult.Continue;
+        catch (Exception e)
+        {
+            Log($"[EventCsWinPanelMatch FATAL] An error occurred: {e.Message}");
+            return HookResult.Continue;
+        }
     }
-}
+
     public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
     {
         try
