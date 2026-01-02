@@ -129,20 +129,30 @@ public partial class MatchZy
     public HookResult EventCsWinPanelMatchHandler(EventCsWinPanelMatch @event, GameEventInfo info)
 {
     try {
-        // 直接呼叫 Utility 裡的判定，它現在會根據 mp_teamname 抓取正確名字
-        string winnerName = GetMatchWinnerName(); 
-        (int t1, int t2) = GetTeamsScore();
+        int ctScore = 0;
+        int tScore = 0;
+        // 抓取真實比分
+        var teams = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+        foreach (var team in teams) {
+            if (team.TeamNum == (byte)CsTeam.CounterTerrorist) ctScore = team.Score;
+            else if (team.TeamNum == (byte)CsTeam.Terrorist) tScore = team.Score;
+        }
 
-        // 呼叫我們剛剛修正後的 EndSeries
-        EndSeries(winnerName, 10, t1, t2);
+        // 核心修正：直接抓取伺服器當前左邊 (mp_teamname_1) 與右邊 (mp_teamname_2) 的名字
+        string name1 = ConVar.Find("mp_teamname_1")?.StringValue ?? ""; 
+        string name2 = ConVar.Find("mp_teamname_2")?.StringValue ?? "";
+        
+        // 判定誰贏：如果是 CT 分數高，贏家就是目前的 name1；如果是 T 分數高，就是 name2
+        string? realWinner = (ctScore > tScore) ? name1 : (tScore > ctScore ? name2 : null);
 
+        // 呼叫 EndSeries
+        EndSeries(realWinner, 10, ctScore, tScore);
         return HookResult.Continue;
     } catch (Exception e) {
         Log($"[EventCsWinPanelMatch FATAL] {e.Message}");
         return HookResult.Continue;
     }
 }
-
     public HookResult EventRoundStartHandler(EventRoundStart @event, GameEventInfo info)
     {
         try
