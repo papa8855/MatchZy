@@ -601,24 +601,56 @@ public void SetMapSides() {
 
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 關鍵：比對名字字串，名字是 "11" 就給 matchzyTeam1 加分
+    // 1. 廣播正確的贏家名字
+    if (winnerName == null) {
+        Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
+    } else {
+        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
+    }
+
+    // 2. 核心修正：判斷大分應該加在誰身上
+    // 這裡不看 team1/team2 變數，直接看名字比對
     if (winnerName != null) {
         if (winnerName == matchzyTeam1.teamName) {
-            matchzyTeam1.seriesScore++; // 確實加給 11 隊
-            Log($"[MatchZy] {matchzyTeam1.teamName} 大分累計: {matchzyTeam1.seriesScore}");
+            matchzyTeam1.seriesScore++;
         } else if (winnerName == matchzyTeam2.teamName) {
-            matchzyTeam2.seriesScore++; // 確實加給 22 隊
-            Log($"[MatchZy] {matchzyTeam2.teamName} 大分累計: {matchzyTeam2.seriesScore}");
+            matchzyTeam2.seriesScore++;
         }
     }
 
-    // --- 絕對不寫對調物件的代碼 (matchzyTeam1, matchzyTeam2) = ... 避免當機 ---
+// 3. 換圖前的「歸位」邏輯
+    // 我們直接檢查：目前的 matchzyTeam1 是否已經不是「原始」的那一隊了
+    // 如果 originalTeam1 已經被我們換到 matchzyTeam2 去了，就代表現在是反轉狀態
+    if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
+        Log("[MatchZy] 檢測到變數對位反轉，正在執行物理歸位以確保下一場地圖正確。");
+        (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
+    }
 
+    // 4. 發送事件 (這會影響你的 Discord 推播訊息)
+    string winnerId = "0";
+    if (winnerName == matchzyTeam1.teamName) winnerId = "1";
+    else if (winnerName == matchzyTeam2.teamName) winnerId = "2";
+
+    var seriesResultEvent = new MatchZySeriesResultEvent() {
+        MatchId = liveMatchId,
+        Winner = new Winner(winnerId, winnerId == "1" ? "team1" : "team2"),
+        Team1SeriesScore = matchzyTeam1.seriesScore,
+        Team2SeriesScore = matchzyTeam2.seriesScore,
+        TimeUntilRestore = 10,
+    };
+
+    Task.Run(async () => {
+        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
+        await Task.Delay(2000);
+        await SendEventAsync(seriesResultEvent);
+    });
+
+    if (resetCvarsOnSeriesEnd) ResetChangedConvars();
     isMatchLive = false;
-    
-    // 執行換圖流程
+
+    // 延遲執行換圖或重置
     AddTimer(restartDelay, () => {
-        ResetMatch(false); //
+        ResetMatch(false);
     });
 }
         public void HandlePlayoutConfig()
