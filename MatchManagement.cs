@@ -618,10 +618,10 @@ public void SetMapSides() {
         }
     }
 
-    // 3. 換圖前的「歸位」邏輯
-    // 如果目前的 matchzyTeam1 不是「原始的第一隊」，我們必須在換圖前換回來
-    // 否則下一張圖載入 JSON 時，名字會完全相反
-    if (matchzyTeam1.teamName == matchConfig.Team2Name || (matchzyTeam1 != originalTeam1 && originalTeam1 != null)) {
+// 3. 換圖前的「歸位」邏輯
+    // 我們直接檢查：目前的 matchzyTeam1 是否已經不是「原始」的那一隊了
+    // 如果 originalTeam1 已經被我們換到 matchzyTeam2 去了，就代表現在是反轉狀態
+    if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
         Log("[MatchZy] 檢測到變數對位反轉，正在執行物理歸位以確保下一場地圖正確。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
     }
