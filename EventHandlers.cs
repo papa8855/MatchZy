@@ -130,7 +130,7 @@ public partial class MatchZy
     {
         try
         {
-            // HandleMatchEnd();
+            HandleMatchEnd();
             // ResetMatch();
             return HookResult.Continue;
         }
