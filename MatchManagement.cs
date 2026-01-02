@@ -601,35 +601,24 @@ public void SetMapSides() {
 
         public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // 1. 顯示誰贏了地圖 (只顯示名字，避免報分 Bug)
+    // 1. 判定大分：不看隊伍順序，直接比對名字字串
     if (winnerName != null) {
-        Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場地圖！");
-    }
-
-    // 2. 判定大分：直接比對贏家的名字字串
-    if (winnerName != null) {
+        // 如果贏家名字等於 11 隊原本的名字，就給 Team1 加分
         if (winnerName == matchzyTeam1.teamName) {
             matchzyTeam1.seriesScore++;
-            Log($"[MatchZy] {matchzyTeam1.teamName} 大分 +1, 目前: {matchzyTeam1.seriesScore}");
+            Log($"[MatchZy] {matchzyTeam1.teamName} 大分累計: {matchzyTeam1.seriesScore}");
         } else if (winnerName == matchzyTeam2.teamName) {
             matchzyTeam2.seriesScore++;
-            Log($"[MatchZy] {matchzyTeam2.teamName} 大分 +1, 目前: {matchzyTeam2.seriesScore}");
+            Log($"[MatchZy] {matchzyTeam2.teamName} 大分累計: {matchzyTeam2.seriesScore}");
         }
     }
 
-    // --- 重要修正：刪除原本會導致當機與判定混亂的物理對調 (matchzyTeam1, matchzyTeam2) = ... ---
-    // 我們不再手動對調這兩個物件，讓 ResetMatch 根據 JSON 設定自動處理。
-
+    // 2. 停止當機：確保這裡沒有任何「物件對調」的代碼
     isMatchLive = false;
     
-    // 同步資料庫 (如果需要)
-    Task.Run(async () => {
-        await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", matchzyTeam1.seriesScore, matchzyTeam2.seriesScore);
-    });
-
-    // 延遲換圖
+    // 3. 執行換圖流程 (維持前天能用的 ResetMatch)
     AddTimer(restartDelay, () => {
-        ResetMatch(false); //
+        ResetMatch(false);
     });
 }
         public void HandlePlayoutConfig()
