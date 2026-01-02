@@ -300,7 +300,7 @@ AddCommandListener("jointeam", (player, info) =>
                         return HookResult.Continue;
                     }
                     if (!isMatchLive) return HookResult.Continue;
-                    HandlePostRoundEndEvent(@event);
+                //  HandlePostRoundEndEvent(        
                     return HookResult.Continue;
                 }
                 catch (Exception e)
