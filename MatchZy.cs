@@ -91,9 +91,13 @@ namespace MatchZy
 
             // This sets default config ConVars
             Server.ExecuteCommand("execifexists MatchZy/config.cfg");
-
+            Localizer["matchzy.round.map_winner"] = "";
+            Localizer["matchzy.round.series_winner"] = "";
+            Localizer["matchzy.round.score"] = "";
             teamSides[matchzyTeam1] = "CT";
             teamSides[matchzyTeam2] = "TERRORIST";
+			matchzyTeam1.teamName = ""; 
+            matchzyTeam2.teamName = "";
             reverseTeamSides["CT"] = matchzyTeam1;
             reverseTeamSides["TERRORIST"] = matchzyTeam2;
 
