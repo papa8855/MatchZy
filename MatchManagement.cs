@@ -607,50 +607,53 @@ public void SetMapSides() {
 
 public void EndSeries(string? winnerName, int restartDelay, int t1score, int t2score)
 {
-    // --- 這裡放【判定邏輯】 ---
+    // 1. 【邏輯升級】無視外部輸入，強制依據這本地圖的分數鎖定贏家
     if (t1score > t2score) {
         winnerName = matchzyTeam1.teamName;
     } else if (t2score > t1score) {
         winnerName = matchzyTeam2.teamName;
     }
 
-    // --- 這裡放【關鍵 2：廣播文字】 ---
+    // 2. 【封印比分】直接寫死廣播，不給語言包噴出 [0-2] 的機會
     if (winnerName == null) {
         Server.PrintToChatAll($"{chatPrefix} 比賽結束，雙方戰平！");
     } else {
-        // 直接寫死這行
         Server.PrintToChatAll($"{chatPrefix} {ChatColors.Green}{winnerName}{ChatColors.Default} 贏得了本場勝利！");
     }
 
-    // --- 這裡放【關鍵 1：手動加分】 ---
+    // 3. 【核心修正】強行加分，這是跑到第三場的唯一路徑
     if (winnerName != null) {
         if (winnerName == matchzyTeam1.teamName) {
             matchzyTeam1.seriesScore++; 
+            Log($"[MatchZy DEBUG] {matchzyTeam1.teamName} 大分增加至: {matchzyTeam1.seriesScore}");
         } else if (winnerName == matchzyTeam2.teamName) {
             matchzyTeam2.seriesScore++;
+            Log($"[MatchZy DEBUG] {matchzyTeam2.teamName} 大分增加至: {matchzyTeam2.seriesScore}");
         }
     }
 
+    // 4. 【同步大分】確保 eventScore 拿到的是「加分後」且「歸位前」的最真實數據
     int eventScore1 = matchzyTeam1.seriesScore;
     int eventScore2 = matchzyTeam2.seriesScore;
 
-    // 4. 物理歸位
+    // 5. 【物理歸位】
     if (originalTeam1 != null && matchzyTeam1 != originalTeam1) {
+        Log("[MatchZy] 檢測到變數反轉，執行歸位。");
         (matchzyTeam1, matchzyTeam2) = (matchzyTeam2, matchzyTeam1);
+        // 歸位後， eventScore 也需要重新對應，否則資料庫會存反
+        (eventScore1, eventScore2) = (eventScore2, eventScore1);
     }
 
-    // 5. 資料庫同步
+    // 6. 更新資料庫
     Task.Run(async () => {
         await database.SetMatchEndData(liveMatchId, winnerName ?? "Draw", eventScore1, eventScore2);
         await Task.Delay(2000);
-        // 註解掉 SendEventAsync 以防止某些外部 UI 噴出比分
-        // await SendEventAsync(seriesResultEvent); 
     });
 
     if (resetCvarsOnSeriesEnd) ResetChangedConvars();
     isMatchLive = false;
     
-    // 6. 重置並進入下一張地圖
+    // 7. 【關鍵】執行換圖判定。ResetMatch 會檢查 seriesScore 是否達到 (NumMaps / 2) + 1
     AddTimer(restartDelay, () => {
         ResetMatch(false);
     });
