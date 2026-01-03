@@ -95,8 +95,8 @@ namespace MatchZy
             // 移除 Localizer 賦值以修正編譯錯誤
             teamSides[matchzyTeam1] = "CT";
             teamSides[matchzyTeam2] = "TERRORIST";
-			matchzyTeam1.teamName = ""; 
-            matchzyTeam2.teamName = "";
+            matchzyTeam1.teamName = "\u200B"; 
+            matchzyTeam2.teamName = "\u200B";
             reverseTeamSides["CT"] = matchzyTeam1;
             reverseTeamSides["TERRORIST"] = matchzyTeam2;
 
@@ -323,17 +323,23 @@ AddCommandListener("jointeam", (player, info) =>
             //     return HookResult.Continue;
             // });
 
-            RegisterListener<Listeners.OnMapStart>(mapName => { 
-                AddTimer(1.0f, () => {
-                    if (!isMatchSetup)
-                    {
-                        AutoStart();
-                        return;
-                    }
-                    if (isWarmup) StartWarmup();
-                    if (isPractice) StartPracticeMode();
-                });
-            });
+        RegisterListener<Listeners.OnMapStart>(mapName => { 
+        AddTimer(1.0f, () => {
+        // 每張圖開始時，強制把 Team 1 設回初始狀態，防止它跳到 Team 2
+        teamSides[matchzyTeam1] = "CT";
+        teamSides[matchzyTeam2] = "TERRORIST";
+        reverseTeamSides["CT"] = matchzyTeam1;
+        reverseTeamSides["TERRORIST"] = matchzyTeam2;
+
+        if (!isMatchSetup)
+        {
+            AutoStart();
+            return;
+        }
+        if (isWarmup) StartWarmup();
+        if (isPractice) StartPracticeMode();
+    });
+});
 
             // RegisterListener<Listeners.OnMapEnd>(() => {
             //     Log($"[Listeners.OnMapEnd] Resetting match!");
